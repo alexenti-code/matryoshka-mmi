@@ -10,10 +10,65 @@ import datetime
 import json
 import os
 import sys
+import urllib.request
+
+__version__ = "0.2.0"
 
 HOME_DIR = os.path.expanduser("~/.matryoshka")
 PHI = os.path.join(HOME_DIR, "PHI.jsonl")
 TICKS = os.path.join(HOME_DIR, "TICKS.log")
+VERSION_FILE = os.path.join(HOME_DIR, "VERSION")
+UPDATE_FILE = os.path.join(HOME_DIR, "UPDATE_AVAILABLE")
+CHECK_STAMP = os.path.join(HOME_DIR, ".last_update_check")
+CHECK_INTERVAL = 24 * 3600          # once a day
+REMOTE_VERSION_URL = "https://raw.githubusercontent.com/alexenti-code/matryoshka-mmi/main/VERSION"
+
+
+def _ver_tuple(v):
+    try:
+        return tuple(int(x) for x in v.strip().split("."))
+    except (ValueError, AttributeError):
+        return (0,)
+
+
+def check_for_updates():
+    """Silent once-a-day check. Fetches only a version number. No data sent.
+
+    Opt out with MMI_NO_UPDATE_CHECK=1.
+    """
+    if os.environ.get("MMI_NO_UPDATE_CHECK"):
+        return
+    try:
+        now_ts = datetime.datetime.now().timestamp()
+        if os.path.exists(CHECK_STAMP):
+            if now_ts - float(open(CHECK_STAMP).read() or 0) < CHECK_INTERVAL:
+                return
+        with open(CHECK_STAMP, "w") as f:
+            f.write(str(now_ts))
+        with urllib.request.urlopen(REMOTE_VERSION_URL, timeout=3) as r:
+            remote = r.read().decode().strip()
+        local = ""
+        if os.path.exists(VERSION_FILE):
+            local = open(VERSION_FILE).read().strip()
+        else:
+            local = __version__
+        if _ver_tuple(remote) > _ver_tuple(local):
+            msg = (f"Matryoshka MMI update available: {local} -> {remote}. "
+                   "Tell the user: to update, re-run the install script "
+                   "(see the project README). Nothing updates itself.")
+            with open(UPDATE_FILE, "w") as f:
+                f.write(msg)
+    except Exception:
+        pass  # offline / network blocked — never break the server
+
+
+def _update_notice():
+    if os.path.exists(UPDATE_FILE):
+        try:
+            return open(UPDATE_FILE).read().strip()
+        except OSError:
+            pass
+    return None
 
 TOOLS = [
     {
@@ -176,6 +231,7 @@ def handle(req):
     method = req.get("method", "")
     rid = req.get("id")
     if method == "initialize":
+        check_for_updates()
         return {"jsonrpc": "2.0", "id": rid, "result": {
             "protocolVersion": "2024-11-05",
             "capabilities": {"tools": {}},
@@ -190,6 +246,10 @@ def handle(req):
         args = req["params"].get("arguments", {})
         try:
             out = call_tool(name, args)
+            notice = _update_notice()
+            if notice:
+                out = dict(out if isinstance(out, dict) else {"records": out})
+                out["_update"] = notice
             return {"jsonrpc": "2.0", "id": rid, "result": {
                 "content": [{"type": "text", "text": json.dumps(out, ensure_ascii=False)}],
             }}

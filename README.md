@@ -92,6 +92,26 @@ history is never erased.
 - Python 3.10+ (stdlib only, zero dependencies)
 - Any MCP-capable agent with a working model (bring your own provider/key)
 
+## Updates
+
+The server checks GitHub **once a day** for a newer version number. Only a
+version string is fetched — no data about you or your memory ever leaves your
+machine. Don't want even that? Run the agent with `MMI_NO_UPDATE_CHECK=1`.
+
+When a new version is out, your agent mentions it during a session. You
+decide: re-run the install script to apply, or ignore. **Nothing ever updates
+itself.**
+
+```bash
+bash install.sh    # re-run: updates the server, keeps your memory data
+```
+
+Full removal in one step:
+
+```bash
+bash uninstall.sh
+```
+
 ## What this is (and is not)
 
 This is the public executor level of the Matryoshka principle: a separate,

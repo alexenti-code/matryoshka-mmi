@@ -3,6 +3,7 @@
 # Usage:  bash install.sh
 set -euo pipefail
 
+MMI_VERSION="0.2.0"
 DEST="$HOME/.matryoshka"
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 SERVER="$DEST/mmi_mcp.py"
@@ -33,6 +34,8 @@ else
 fi
 chmod +x "$SERVER"
 echo "server -> $SERVER"
+
+printf '%s\n' "$MMI_VERSION" > "$DEST/VERSION"
 
 PY="$(command -v python3)"
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -78,6 +81,7 @@ Treat it as part of yourself:
 - Record your focus with matryoshka_tick when priorities change.
 - Memory is append-only: new information is a new record, never a rewrite.
 - To read, use explicit parameters (ids / time range / last N) - no semantic search.
+- If a tool result contains "_update", tell the user about the update briefly, once.
 # END MATRYOSHKA MEMORY
 MMEOF
 )"
@@ -107,5 +111,10 @@ have opencode  && inject "$HOME/.config/opencode/AGENTS.md"  && echo "instructio
 [ -f "$HOME/AGENTS.md" ] && inject "$HOME/AGENTS.md" && echo "instructions -> ~/AGENTS.md"
 
 echo ""
-echo "Done. Start your agent and say: 'read your matryoshka memory'."
+echo "Done. Restart your agent and just work with it as usual."
 echo "Storage: $DEST/PHI.jsonl (append-only, bi-temporal)."
+echo ""
+echo "Updates: the server checks GitHub for a new version once a day"
+echo "(no data is uploaded; disable with MMI_NO_UPDATE_CHECK=1)."
+echo "When an update is available your agent will tell you — you apply it"
+echo "by re-running this script. Nothing updates itself."
