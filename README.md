@@ -56,15 +56,17 @@ or one line:
 curl -fsSL https://raw.githubusercontent.com/alexenti-code/matryoshka-mmi/main/install.sh | bash
 ```
 
-## Try it (60 seconds)
+## Use it
 
-Restart your agent, then say:
+Restart your agent. That's it — after that you just work with your agent as
+usual. Nothing to type, no commands to learn.
 
-```
-Read your matryoshka memory. Then remember: my name is <...>, I prefer <...>.
-```
+Under the hood the agent reads its memory at the start of every session and
+writes down durable facts on its own (who you are, your project, decisions
+you made together). Ask it next day "what do you remember about me?" and it
+will answer — no special phrases were ever needed.
 
-Next session, the agent recalls it on its own. Your data is right there:
+Curious what it stored? Your data is right there:
 
 ```bash
 cat ~/.matryoshka/PHI.jsonl
