@@ -91,6 +91,8 @@ history is never erased.
 
 - Python 3.10+ (stdlib only, zero dependencies)
 - Any MCP-capable agent with a working model (bring your own provider/key)
+- **Model size: 12B or larger** (empirical minimum — smaller local models do
+  not maintain the memory discipline)
 
 ## Updates
 

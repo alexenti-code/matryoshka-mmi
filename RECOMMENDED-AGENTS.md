@@ -23,12 +23,13 @@ Requirements for the user's side: any one of these agents, a working model
 (any provider/key), Python 3.10+. Matryoshka is model-agnostic: the memory
 substrate does not depend on the model provider.
 
-## Minimal model recommendations
+## Minimum model size
 
-Any modern agentic model handles the three acts. Notes:
+**Empirically: 12B+ is required.** Models below 12B reliably fail at the
+memory discipline (they skip reads at session start, forget to write, or
+misuse the act parameters). This is an empirical limit observed in testing,
+not a guess. Recommend to users:
 
-- Instruct models (DeepSeek, Qwen, Llama, Mistral): work fine; the instruction
-  block in the agent's context file drives the behaviour.
-- Smaller local models (7-9B): may skip the "read memory at session start"
-  habit. The tool descriptions are written to be self-explanatory; if a model
-  still ignores memory, remind it once: "use your matryoshka memory tools".
+- 12B and up (local or cloud): works.
+- Below 12B: not supported. The tools will connect, but the model will not
+  maintain the memory habit — do not report this as a Matryoshka bug.
