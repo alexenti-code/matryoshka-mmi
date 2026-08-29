@@ -1,8 +1,8 @@
 # Matryoshka MMI
 
-**Give your coding agent a persistent plastic memory.**
+**Add a persistent plastic memory to your coding agent.**
 
-Matryoshka is a writable memory substrate that your agent treats as part of
+Matryoshka is a writable memory substrate your agent treats as part of
 itself — not a vector database, not RAG. The agent decides what to remember,
 writes facts into an append-only bi-temporal store, and flips through its own
 diary with explicit reads. No embedding models, no external services, no
@@ -12,6 +12,37 @@ Works with **Claude Code**, **OpenCode**, and **Prime Agent** (anything that
 speaks MCP). Your model, your key, your memory — everything stays on your
 machine.
 
+## What the installer does — exactly
+
+Everything happens **on your own machine, in your own home directory**.
+Nothing is uploaded, nothing is sent anywhere, no remote account is involved.
+
+Before changing anything the installer prints the list of files it will touch
+and asks for confirmation. It only ever:
+
+1. Creates `~/.matryoshka/` and puts two files there:
+   - `mmi_mcp.py` — the memory server (a local program, ~8 KB of Python);
+   - later, your own memory data: `PHI.jsonl`, `TICKS.log`.
+2. Adds **one entry** named `matryoshka` to the config of each coding agent
+   it finds **on your machine** — only so that agent knows the memory server
+   exists:
+   - Claude Code: `~/.claude.json` → `mcpServers`
+   - OpenCode: `~/.config/opencode/opencode.json` → `mcp`
+   - Prime Agent: its user MCP list
+3. Appends a clearly-marked text block (`BEGIN/END MATRYOSHKA MEMORY`) to the
+   agent's instruction file (`~/.claude/CLAUDE.md` etc.), teaching the agent
+   when to read and write its memory.
+
+That is all. No other files are read or modified. Full removal:
+
+```bash
+claude mcp remove matryoshka --scope user   # if you use Claude Code
+prime-agent mcp remove matryoshka           # if you use Prime Agent
+# + delete the "matryoshka" entry in ~/.config/opencode/opencode.json, if you use OpenCode
+# + delete the MATRYOSHKA MEMORY block from ~/.claude/CLAUDE.md
+rm -rf ~/.matryoshka
+```
+
 ## Install
 
 ```bash
@@ -19,16 +50,11 @@ git clone https://github.com/alexenti-code/matryoshka-mmi
 cd matryoshka-mmi && bash install.sh
 ```
 
-or one line (once published):
+or one line:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/alexenti-code/matryoshka-mmi/main/install.sh | bash
 ```
-
-The installer:
-1. puts the MCP server into `~/.matryoshka/`,
-2. registers it in every agent it finds on your machine (Claude Code / OpenCode / Prime Agent),
-3. adds a short memory instruction to the agent's context so it starts using the memory as part of itself.
 
 ## Try it (60 seconds)
 
@@ -38,7 +64,7 @@ Restart your agent, then say:
 Read your matryoshka memory. Then remember: my name is <...>, I prefer <...>.
 ```
 
-Next session, the agent recalls it on its own. Check the store yourself:
+Next session, the agent recalls it on its own. Your data is right there:
 
 ```bash
 cat ~/.matryoshka/PHI.jsonl
@@ -63,24 +89,6 @@ history is never erased.
 
 - Python 3.10+ (stdlib only, zero dependencies)
 - Any MCP-capable agent with a working model (bring your own provider/key)
-
-## Files
-
-```
-~/.matryoshka/
-├── mmi_mcp.py     ← MCP server (the executor "hand")
-├── PHI.jsonl      ← plastic substrate: append-only memory records
-└── TICKS.log      ← the instance's own time (ticks)
-```
-
-## Uninstall
-
-```bash
-claude mcp remove matryoshka --scope user 2>/dev/null
-prime-agent mcp remove matryoshka 2>/dev/null
-rm -rf ~/.matryoshka
-```
-(and remove the MATRYOSHKA MEMORY block from `~/.claude/CLAUDE.md` if present)
 
 ## What this is (and is not)
 

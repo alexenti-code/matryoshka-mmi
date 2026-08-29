@@ -8,6 +8,22 @@ SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 SERVER="$DEST/mmi_mcp.py"
 
 echo "== Matryoshka MMI installer =="
+echo ""
+echo "This runs on YOUR machine and only touches YOUR files:"
+echo "  create/replace  $DEST/mmi_mcp.py        (the memory server)"
+echo "  add entry       'matryoshka' into each detected agent's MCP config"
+echo "  append block    'BEGIN/END MATRYOSHKA MEMORY' into agent instruction files"
+echo "  storage         $DEST/PHI.jsonl  (created later, by you/your agent)"
+echo "Nothing is sent anywhere. Uninstall: see README."
+if [ -t 0 ]; then
+  printf "Proceed? [y/N] "
+  read -r REPLY
+  case "$REPLY" in
+    y|Y) ;;
+    *) echo "Aborted, nothing changed."; exit 1 ;;
+  esac
+fi
+echo ""
 
 mkdir -p "$DEST"
 if [ -f "$SRC_DIR/mmi_mcp.py" ]; then
@@ -23,7 +39,7 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 if have claude; then
   claude mcp remove matryoshka --scope user >/dev/null 2>&1 || true
-  claude mcp add matryoshka --scope user -- "$PY" "$SERVER" && echo "registered: Claude Code"
+  claude mcp add matryoshka --scope user -- "$PY" "$SERVER" && echo "registered: Claude Code (your ~/.claude.json)"
 fi
 
 if have opencode; then
