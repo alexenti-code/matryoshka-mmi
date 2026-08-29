@@ -12,7 +12,7 @@ import os
 import sys
 import urllib.request
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 HOME_DIR = os.path.expanduser("~/.matryoshka")
 PHI = os.path.join(HOME_DIR, "PHI.jsonl")
@@ -116,6 +116,15 @@ TOOLS = [
         },
     },
     {
+        "name": "matryoshka_status",
+        "description": (
+            "Matryoshka self-check: report your memory substrate status "
+            "(server version, number of memory records, ticks, storage path, "
+            "update availability). Use it when the user asks about the memory."
+        ),
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "matryoshka_read",
         "description": (
             "Matryoshka memory act READ: look into your own memory. Only by "
@@ -217,6 +226,25 @@ def call_tool(name, args):
             args["content"], args.get("layer", "episode"),
             args.get("valid_time"), args.get("source", "dialogue"),
         )
+    if name == "matryoshka_status":
+        import collections
+        recs = _load(PHI)
+        layers = {}
+        for r in recs:
+            layers[r.get("layer", "?")] = layers.get(r.get("layer", "?"), 0) + 1
+        st = {
+            "server": "matryoshka-mmi",
+            "version": __version__,
+            "records": len(recs),
+            "layers": layers,
+            "storage": PHI,
+            "append_only": True,
+            "bi_temporal": True,
+        }
+        n = _update_notice()
+        if n:
+            st["_update"] = n
+        return st
     if name == "matryoshka_read":
         return act_read(
             args.get("mode", "last"), args.get("ids"),
