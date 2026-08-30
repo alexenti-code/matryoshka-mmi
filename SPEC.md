@@ -17,10 +17,13 @@ vectors, no semantic search).
 
 Matryoshka is an **addition**, not a replacement. The user keeps their existing
 tools — logs, RAG pipelines, vector databases, graphs — everything stays.
-Matryoshka adds one more thing next to them: the agent's *own* memory, authored
-by the agent itself. The only forbidden pattern is an external controller that
-decides *for* the model what to remember; the agent's existing tools are not
-replaced and not touched.
+Matryoshka adds one more thing next to them: the **model's own memory** —
+the plastic substrate belongs to the model, not to the agent harness. The
+agent orchestrates; the model decides. Every memory act (what to write, when
+to read, what to repeat) is an act of the model itself; the agent shell and
+the server only execute. The only forbidden pattern is an external controller
+that decides *for* the model what to remember; the agent's existing tools are
+not replaced and not touched.
 
 Architecture roles (per Matryoshka MANIFEST):
 

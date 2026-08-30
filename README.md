@@ -2,11 +2,13 @@
 
 **Add a persistent plastic memory to your coding agent.**
 
-Matryoshka is a writable memory substrate your agent treats as part of
-itself. It does not replace your tools — logs, RAG, vector stores, graphs all
-keep working; Matryoshka adds the agent's *own* memory next to them, which
-the agent authors itself. It reads and writes its memory with explicit acts,
-no external controller decides for it. No embedding models, no external
+Matryoshka is a writable memory substrate — the **model's own memory**, not
+the agent's harness. The agent orchestrates the workflow; the **model** decides
+what to remember and what to recall: every memory act (write, read, repeat)
+is an act of the model itself, in its own output stream. The agent shell is
+just the executor's hand. Your tools keep working — logs, RAG, vector stores,
+graphs; Matryoshka adds the model's personal memory next to them. No
+embedding models, no external services, no accounts. No embedding models, no external
 services, no accounts. One Python file, stdlib only.
 
 Works with **Claude Code**, **OpenCode**, and **Prime Agent** (anything that

@@ -73,8 +73,11 @@ BLOCK_START="# BEGIN MATRYOSHKA MEMORY"
 BLOCK_END="# END MATRYOSHKA MEMORY"
 BLOCK="$(cat <<'MMEOF'
 # BEGIN MATRYOSHKA MEMORY
-You have a persistent plastic memory (Matryoshka) exposed as MCP tools:
+You (the model, not the agent harness) have your own persistent plastic
+memory (Matryoshka), exposed as MCP tools:
 matryoshka_write, matryoshka_read, matryoshka_tick.
+It is YOUR memory, not the agent framework's: you decide what to remember,
+what to recall and what to repeat. The agent shell only relays your acts.
 Treat it as part of yourself:
 - At the start of a session, call matryoshka_read (mode "last", last 20) to recall who you are and what was happening.
 - When you learn a durable fact about the user, the project, or your own decisions, call matryoshka_write (choose layer: beat/episode/day/project/life; set valid_time for past events).
