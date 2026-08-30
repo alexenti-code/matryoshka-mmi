@@ -9,8 +9,18 @@
 A long-lived local process (`mmi_mcp.py`) exposing the Matryoshka memory acts
 to any MCP-capable agent (Claude Code, OpenCode, Prime Agent, etc.). The model
 is the only semantic subject: it decides what to remember and what to recall.
+A long-lived local process (`mmi_mcp.py`) exposing the Matryoshka memory acts
+to any MCP-capable agent (Claude Code, OpenCode, Prime Agent, etc.). The model
+is the only semantic subject: it decides what to remember and what to recall.
 The server executes acts and decides nothing (no scoring, no relevance, no
 vectors, no semantic search).
+
+Matryoshka is an **addition**, not a replacement. The user keeps their existing
+tools — logs, RAG pipelines, vector databases, graphs — everything stays.
+Matryoshka adds one more thing next to them: the agent's *own* memory, authored
+by the agent itself. The only forbidden pattern is an external controller that
+decides *for* the model what to remember; the agent's existing tools are not
+replaced and not touched.
 
 Architecture roles (per Matryoshka MANIFEST):
 
@@ -62,6 +72,30 @@ continuous, no thresholds on content, no scoring, no triggers.
 - Dial semantics: `forgetting_tempo` does not decide *what* to forget — only
   *when*, by `record_time`; exactly as `temperature` does not decide *what* to
   say.
+
+## 3.2. Decay and forgetting (roadmap to v0.5)
+
+The current public executor (v0.3) is a symbolic prototype: records are
+stored verbatim in a journal. The theory (THEORY.md v2.0 — "a layer is a
+rate, not a place") defines the target physics of forgetting:
+
+- one write puts the trace into ALL temporal components (fast, medium, slow)
+  of the plastic substrate at once;
+- components decay continuously with different time constants τ
+  (W ×= e^(−dt/τ) per beat); recent and old traces return together on read,
+  and the mixture itself tells the model the age of a memory;
+- the only core act that opposes decay is REPEAT (conscious re-learning);
+- under capacity pressure the executor measures and shows the fill level;
+  what to do about it is the model's decision;
+- the owner sets the physics (memory volume, forgetting_tempo, write_gain —
+  the "temperature class" of memory), never the content.
+
+Consequences for this implementation: decay is applied as physics by the
+executor; nothing is ever selected for deletion by content. Erasure happens
+by amplitude decay and capacity pressure, not by a censorship rule. The
+append-only invariant of the symbolic journal (current version) is the
+honest prototype form; the multi-timescale decay substrate (W_fast/W_slow)
+is specified in the research repository (stand SPEC v0.2–v0.5, THEORY.md).
 
 ## 4. Record format (PHI.jsonl, one JSON object per line)
 

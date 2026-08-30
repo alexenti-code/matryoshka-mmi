@@ -3,10 +3,11 @@
 **Add a persistent plastic memory to your coding agent.**
 
 Matryoshka is a writable memory substrate your agent treats as part of
-itself — not a vector database, not RAG. The agent decides what to remember,
-writes facts into an append-only bi-temporal store, and flips through its own
-diary with explicit reads. No embedding models, no external services, no
-accounts. One Python file, stdlib only.
+itself. It does not replace your tools — logs, RAG, vector stores, graphs all
+keep working; Matryoshka adds the agent's *own* memory next to them, which
+the agent authors itself. It reads and writes its memory with explicit acts,
+no external controller decides for it. No embedding models, no external
+services, no accounts. One Python file, stdlib only.
 
 Works with **Claude Code**, **OpenCode**, and **Prime Agent** (anything that
 speaks MCP). Your model, your key, your memory — everything stays on your
@@ -84,8 +85,10 @@ scoring, no relevance, no vectors):
 | `matryoshka_read` | READ | look into your own diary by ids / time range / last N |
 
 Every record is bi-temporal: `valid_time` (when it was true in the world) and
-`record_time` (when the instance learned it). New information is a new record —
-history is never erased.
+`record_time` (when the instance learned it). Forgetting is physics, not
+censorship: traces decay over time (like human memory), and the agent can
+strengthen what matters by repetition — the same physics is specified in the
+theory ("a layer is a rate, not a place"). Nothing is ever deleted by content.
 
 ## Requirements
 
