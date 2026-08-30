@@ -75,6 +75,20 @@ Curious what it stored? Your data is right there:
 cat ~/.matryoshka/PHI.jsonl
 ```
 
+## Why it matters
+
+This is memory **the model keeps itself**. It decides what deserves to be
+remembered, at what timescale (a beat, an episode, a day, a project, a life),
+and what is worth re-learning. That discipline is a competence, not a feature
+— which is why an intelligent model is required (empirically 12B+): a weak
+model cannot tell the important from the noise, and self-authored memory
+degenerates into a junk drawer.
+
+Two instances of the same model with different substrates are two different
+beings with different biographies. That is the point: memory that is lived,
+not installed. The full theory: [MANIFEST](https://github.com/alexenti-code/matryoshka)
+and THEORY.md in the research repository.
+
 ## The three acts
 
 The agent performs memory acts; the executor never decides anything (no
