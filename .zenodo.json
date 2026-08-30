@@ -1,0 +1,14 @@
+{
+  "title": "Matryoshka MMI — a constitutional memory organ (MCP server) for coding agents",
+  "description": "A local MCP memory server: gives a coding agent its own plastic memory. The model is the only semantic subject — it decides what to remember and what to recall; the server only executes acts (TICK/WRITE/READ/STATUS) over an append-only bi-temporal journal (event time + record time). No scoring, no relevance rankers, no semantic search, no telemetry. Python stdlib only.",
+  "creators": [{"name": "Voronin, Alexey"}],
+  "license": "Apache-2.0",
+  "upload_type": "software",
+  "access_right": "open",
+  "version": "v0.4.0",
+  "keywords": ["large language models", "AI agents", "MCP", "persistent memory", "bi-temporal", "memory organization", "agent infrastructure"],
+  "related_identifiers": [
+    {"identifier": "10.5281/zenodo.22124204", "relation": "isVariantFormOf", "scheme": "doi"},
+    {"identifier": "https://github.com/alexenti-code/matryoshka-mmi", "relation": "isIdenticalTo", "scheme": "url"}
+  ]
+}
