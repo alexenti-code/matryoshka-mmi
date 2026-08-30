@@ -1,6 +1,7 @@
-__pycache__/
-*.pyc
-.DS_Store
 
-# inter-agent service messages (local only, never commit)
+__pycache__/
 .dev-exchange/
+.DS_Store
+*.pyc
+# inter-agent service messages (local only, never commit)
+MONETIZATION.md
