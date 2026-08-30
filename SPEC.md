@@ -42,6 +42,27 @@ Architecture roles (per Matryoshka MANIFEST):
 | `matryoshka_read` | READ | explicit lookup only: `ids`, or `from/to` time range, or `last N` |
 | `matryoshka_status` | STATUS | self-report: version, record counts per layer, storage path |
 
+
+## 3.1. Memory dials (v0.4.0)
+
+Owner-set physics, same constitutional class as sampling `temperature`:
+continuous, no thresholds on content, no scoring, no triggers.
+
+| Dial | Env var | Default | Meaning |
+|---|---|---|---|
+| memory_volume | `MMI_MEMORY_VOLUME_MB` | 0 (unlimited) | active journal size cap, MB; overflow moves oldest records to `PHI-archive.jsonl` |
+| forgetting_tempo | `MMI_FORGETTING_TEMPO_DAYS` | 0 (never) | records older than N days (by `record_time`) move to the archive |
+
+- Archival is mechanical time/size physics: records move with all fields intact
+  (append-only preserved); archived records stay readable by `ids`/`range`;
+  recency reads (`last`) see the active journal only.
+- Factory settings (not exposed in the journal server): `write_gain`,
+  `curiosity_gain`, `recall_sharpness`, `repeat_gain` — require the plastic
+  parameter body (research scope, private repo). Do not expose or emulate.
+- Dial semantics: `forgetting_tempo` does not decide *what* to forget — only
+  *when*, by `record_time`; exactly as `temperature` does not decide *what* to
+  say.
+
 ## 4. Record format (PHI.jsonl, one JSON object per line)
 
 ```json

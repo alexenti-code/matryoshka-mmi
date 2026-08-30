@@ -32,7 +32,18 @@ acts (TICK/WRITE/READ/STATUS) over an append-only bi-temporal journal
    nothing else, ever. No telemetry.
 5. **Research scope:** consolidation and the Rust daemon (mmid) stay in the
    private research repo (`/Users/alex/AURA-Retrieval/MMI/`). Do not disclose.
-6. Test in a sandbox HOME (`/tmp/...`), never in the owner's real HOME.
+6. **Sandbox-first — the foundation of developer safety.** We ship code that
+   runs on other people's machines and touches their memory journals.
+   - Set `HOME` (and any env the code reads) to a sandbox (`/tmp/...`)
+     **before importing the module** — paths are computed at import time.
+   - After every test run, verify isolation: sandbox files exist, real
+     `~/.matryoshka` untouched, no records migrated either way.
+   - Test fixtures are generated code, marked as test data; never copied from
+     real journals (ours or anyone's).
+   - The developer's own agent memory and a user's journal are two different
+     instances with zero shared data.
+   - No release (tag, push, GitHub Release) without a clean sandbox pass:
+     install → handshake → uninstall.
 7. Russian communication with the owner; direct, no fluff.
 
 ## Release procedure

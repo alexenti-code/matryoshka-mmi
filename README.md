@@ -120,14 +120,6 @@ bash uninstall.sh
 - [RECOMMENDED-AGENTS.md](RECOMMENDED-AGENTS.md) — which agents work and which models fit
 - [MONETIZATION.md](MONETIZATION.md) — sustainability proposals (nothing implemented)
 - [NAME.md](NAME.md) — about the name, trademark and patent considerations
-
-## Documentation
-
-- [SPEC.md](SPEC.md) — full specification (acts, record format, update policy)
-- [RECOMMENDED-AGENTS.md](RECOMMENDED-AGENTS.md) — which agents work and which models fit
-- [MONETIZATION.md](MONETIZATION.md) — sustainability proposals (nothing implemented)
-- [NAME.md](NAME.md) — about the name, trademark and patent considerations
-
 ## What this is (and is not)
 
 This is the public executor level of the Matryoshka principle: a separate,

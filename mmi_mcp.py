@@ -12,7 +12,7 @@ import os
 import sys
 import urllib.request
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 HOME_DIR = os.path.expanduser("~/.matryoshka")
 PHI = os.path.join(HOME_DIR, "PHI.jsonl")
@@ -21,6 +21,16 @@ VERSION_FILE = os.path.join(HOME_DIR, "VERSION")
 UPDATE_FILE = os.path.join(HOME_DIR, "UPDATE_AVAILABLE")
 CHECK_STAMP = os.path.join(HOME_DIR, ".last_update_check")
 CHECK_INTERVAL = 24 * 3600          # once a day
+ARCHIVE = os.path.join(HOME_DIR, "PHI-archive.jsonl")
+# Memory dials (v0.4.0) — owner-set physics, continuous, no content decisions:
+#   MMI_MEMORY_VOLUME_MB      active journal size cap in MB; 0 = unlimited.
+#                             When exceeded, oldest records move to the archive.
+#   MMI_FORGETTING_TEMPO_DAYS records older than N days (by record_time) leave
+#                             the active journal at the next archive pass;
+#                             0 = never. Archived records stay readable by
+#                             id/range; recency reads see the active journal only.
+VOLUME_MB = int(os.environ.get("MMI_MEMORY_VOLUME_MB", "0") or 0)
+TEMPO_DAYS = int(os.environ.get("MMI_FORGETTING_TEMPO_DAYS", "0") or 0)
 REMOTE_VERSION_URL = "https://raw.githubusercontent.com/alexenti-code/matryoshka-mmi/main/VERSION"
 
 
@@ -180,6 +190,44 @@ def _next_id(path: str) -> int:
     return max((r.get("id", 0) for r in recs), default=0) + 1
 
 
+def archive_pass():
+    """Mechanical archival: size cap and record-time tempo. Time/size physics
+    only — no content decisions, no scoring. Append-only preserved: records
+    move to the archive file with all fields intact."""
+    if not os.path.exists(PHI):
+        return
+    moved = 0
+    if VOLUME_MB > 0 and os.path.getsize(PHI) > VOLUME_MB * 1024 * 1024:
+        recs = _load(PHI)
+        keep, drop = [], []
+        size = 0
+        for r in reversed(recs):          # newest first
+            size += len(json.dumps(r, ensure_ascii=False))
+            (keep if size <= VOLUME_MB * 1024 * 1024 else drop).append(r)
+        if drop:
+            for r in sorted(drop, key=lambda x: x.get("id", 0)):
+                _append(ARCHIVE, r)
+            with open(PHI, "w", encoding="utf-8") as f:
+                for r in sorted(keep, key=lambda x: x.get("id", 0)):
+                    f.write(json.dumps(r, ensure_ascii=False) + "\n")
+            moved = len(drop)
+    if TEMPO_DAYS > 0:
+        cutoff = (datetime.datetime.now().astimezone()
+                  - datetime.timedelta(days=TEMPO_DAYS)).isoformat(timespec="seconds")
+        recs = _load(PHI)
+        old = [r for r in recs if r.get("record_time", "9999") < cutoff]
+        if old:
+            for r in old:
+                _append(ARCHIVE, r)
+            keep_ids = {r.get("id") for r in old}
+            with open(PHI, "w", encoding="utf-8") as f:
+                for r in recs:
+                    if r.get("id") not in keep_ids:
+                        f.write(json.dumps(r, ensure_ascii=False) + "\n")
+            moved += len(old)
+    return moved
+
+
 def act_tick(note=None, priorities=None) -> dict:
     rec = {
         "id": _next_id(TICKS),
@@ -206,6 +254,8 @@ def act_write(content, layer="episode", valid_time=None, source="dialogue") -> d
 
 def act_read(mode="last", ids=None, frm=None, to=None, last=10):
     recs = _load(PHI)
+    if mode in ("ids", "range"):
+        recs = recs + [r for r in _load(ARCHIVE) if r not in recs]  # архив читаем
     if mode == "ids":
         recs = [r for r in recs if r.get("id") in (ids or [])]
     elif mode == "range":
@@ -219,6 +269,7 @@ def act_read(mode="last", ids=None, frm=None, to=None, last=10):
 
 
 def call_tool(name, args):
+    archive_pass()
     if name == "matryoshka_tick":
         return act_tick(args.get("note"), args.get("priorities"))
     if name == "matryoshka_write":
@@ -236,10 +287,13 @@ def call_tool(name, args):
             "server": "matryoshka-mmi",
             "version": __version__,
             "records": len(recs),
+            "archived": len(_load(ARCHIVE)),
             "layers": layers,
             "storage": PHI,
             "append_only": True,
             "bi_temporal": True,
+            "dials": {"memory_volume_mb": VOLUME_MB or "unlimited",
+                      "forgetting_tempo_days": TEMPO_DAYS or "never"},
         }
         n = _update_notice()
         if n:
@@ -263,7 +317,7 @@ def handle(req):
         return {"jsonrpc": "2.0", "id": rid, "result": {
             "protocolVersion": "2024-11-05",
             "capabilities": {"tools": {}},
-            "serverInfo": {"name": "matryoshka-mmi", "version": "0.1.0"},
+            "serverInfo": {"name": "matryoshka-mmi", "version": __version__},
         }}
     if method == "notifications/initialized":
         return None
