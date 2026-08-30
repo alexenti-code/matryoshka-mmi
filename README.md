@@ -8,8 +8,8 @@ what to remember and what to recall: every memory act (write, read, repeat)
 is an act of the model itself, in its own output stream. The agent shell is
 just the executor's hand. Your tools keep working — logs, RAG, vector stores,
 graphs; Matryoshka adds the model's personal memory next to them. No
-embedding models, no external services, no accounts. No embedding models, no external
-services, no accounts. One Python file, stdlib only.
+embedding models, no external services, no accounts. One Python file,
+stdlib only.
 
 Works with **Claude Code**, **OpenCode**, and **Prime Agent** (anything that
 speaks MCP). Your model, your key, your memory — everything stays on your
@@ -21,10 +21,11 @@ Everything happens **on your own machine, in your own home directory**.
 Nothing is uploaded, nothing is sent anywhere, no remote account is involved.
 
 Before changing anything the installer prints the list of files it will touch
-and asks for confirmation. It only ever:
+and asks for confirmation (interactive runs; a piped `curl | bash` run
+proceeds non-interactively, backing up every replacement). It only ever:
 
 1. Creates `~/.matryoshka/` and puts two files there:
-   - `mmi_mcp.py` — the memory server (a local program, ~8 KB of Python);
+   - `mmi_mcp.py` — the memory server (a local program, one Python file);
    - later, your own memory data: `PHI.jsonl`, `TICKS.log`.
 2. Adds **one entry** named `matryoshka` to the config of each coding agent
    it finds **on your machine** — only so that agent knows the memory server
@@ -123,7 +124,7 @@ scoring, no relevance, no vectors):
 
 | Tool | Act | Meaning |
 |---|---|---|
-| `matryoshka_tick` | TICK | accept the working beat, record priorities |
+| `matryoshka_tick` | TICK | accept the working beat, record priorities (written to the time log; not returned by READ) |
 | `matryoshka_write` | WRITE | conscious act of remembering (append-only) |
 | `matryoshka_repeat` | REPEAT | conscious re-learning; each repeat doubles the trace signal |
 | `matryoshka_read` | READ | look into your own diary by ids / time range / last N |
@@ -142,6 +143,9 @@ REPEAT: the model re-learns what proved important, doubling the signal each
 time. Nothing is ever deleted by content; decay and repetition are physics,
 the same way `temperature` is physics for generation. The owner sets the
 constants (e.g. `MMI_TAU_SCALE`), the model owns the meaning.
+In this executor the decay is computed symbolically over the append-only
+journal (the `weight` on each read); the multi-timescale plastic substrate
+is the research target — see SPEC.md, "Decay and forgetting".
 
 ## Requirements
 

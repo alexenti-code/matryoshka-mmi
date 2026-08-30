@@ -8,11 +8,12 @@ Append-only storage, bi-temporal records.
 """
 import datetime
 import json
+import math
 import os
 import sys
 import urllib.request
 
-__version__ = "0.5.0"
+__version__ = "0.5.1"
 
 HOME_DIR = os.path.expanduser("~/.matryoshka")
 PHI = os.path.join(HOME_DIR, "PHI.jsonl")
@@ -38,6 +39,8 @@ TEMPO_DAYS = int(os.environ.get("MMI_FORGETTING_TEMPO_DAYS", "0") or 0)
 # Continuous physics, no content decisions — the temperature class.
 # Owner-settable: MMI_TAU_SCALE multiplies every tau (2.0 = forgets 2x slower).
 TAU_SCALE = float(os.environ.get("MMI_TAU_SCALE", "1.0") or 1.0)
+if not (TAU_SCALE > 0):            # 0 / negative / NaN would break the decay math
+    TAU_SCALE = 1.0
 TAU = {  # seconds; factory settings, documented in SPEC.md
     "beat":    1 * 3600,        # hours
     "episode": 1 * 86400,       # a day
@@ -263,8 +266,8 @@ def archive_pass():
         if old:
             for r in old:
                 _append(ARCHIVE, r)
-            keep_ids = {r.get("id") for r in old}
-            _rewrite(PHI, [r for r in recs if r.get("id") not in keep_ids])
+            old_ids = {r.get("id") for r in old}
+            _rewrite(PHI, [r for r in recs if r.get("id") not in old_ids])
             moved += len(old)
     return moved
 
@@ -304,12 +307,14 @@ def rec_id_ok(rec, rid):
     return rid in (rec.get("refs") or [])
 
 
-def _weight(rec) -> float:
+def _weight(rec, repeats=0) -> float:
     """Current trace strength: (1 + repeats) * exp(-dt/tau[layer]).
 
     Pure friction physics shown on read. Nothing is filtered, ranked or
     dropped by it: the number only tells the model how loud the trace
-    still is — like a mixture that itself reports its age (THEORY.md)."""
+    still is — like a mixture that itself reports its age (THEORY.md).
+    `repeats` is passed in by the caller (counted in one journal pass);
+    the standalone default keeps the function honest for single records."""
     if rec.get("act") == "TICK":
         return 1.0
     try:
@@ -318,13 +323,21 @@ def _weight(rec) -> float:
     except (ValueError, TypeError):
         dt = 0.0
     tau = TAU.get(rec.get("layer", "episode"), TAU["episode"]) * TAU_SCALE
-    n = _repeats_of(rec.get("id")) if rec.get("act") == "WRITE" else 0
-    return round((1 + n) * pow(2.718281828, -dt / tau), 4)
+    n = repeats if rec.get("act") == "WRITE" else 0
+    return round((1 + n) * math.exp(-dt / tau), 4)
 
 
 def act_repeat(rec_id, note=None) -> dict:
     """Conscious re-learning: a NEW record referencing the original.
-    History is never rewritten; the original trace gains signal."""
+    History is never rewritten; the original trace gains signal.
+    Only an existing WRITE record can be repeated: repeating a missing
+    or non-WRITE id is an error, never a silent no-op."""
+    known = {r.get("id") for r in _load(PHI) + _load(ARCHIVE)
+             if r.get("act") == "WRITE"}
+    if rec_id not in known:
+        raise ValueError(
+            f"repeat: no WRITE record with id {rec_id} in the journal "
+            "(repeating a missing or non-WRITE record is not possible)")
     rec = {
         "id": _next_id(PHI),
         "record_time": now(),
@@ -339,7 +352,13 @@ def act_repeat(rec_id, note=None) -> dict:
 
 
 def act_read(mode="last", ids=None, frm=None, to=None, last=10):
-    recs = _load(PHI)
+    phi = _load(PHI)
+    repeats = {}
+    for r in phi:                      # one pass: count REPEAT refs per id
+        if r.get("act") == "REPEAT":
+            for ref in (r.get("refs") or []):
+                repeats[ref] = repeats.get(ref, 0) + 1
+    recs = phi
     if mode in ("ids", "range"):
         recs = recs + [r for r in _load(ARCHIVE) if r not in recs]  # архив читаем
     if mode == "ids":
@@ -351,7 +370,7 @@ def act_read(mode="last", ids=None, frm=None, to=None, last=10):
         recs = [r for r in recs if in_range(r)]
     else:
         recs = recs[-(last or 10):]
-    return [dict(r, weight=_weight(r)) for r in recs]
+    return [dict(r, weight=_weight(r, repeats.get(r.get("id"), 0))) for r in recs]
 
 
 def call_tool(name, args):
@@ -368,9 +387,10 @@ def call_tool(name, args):
     if name == "matryoshka_status":
         import collections
         recs = _load(PHI)
-        layers = {}
+        layers = {}   # WRITE records only: REPEAT records are acts, not layers
         for r in recs:
-            layers[r.get("layer", "?")] = layers.get(r.get("layer", "?"), 0) + 1
+            if r.get("act") == "WRITE":
+                layers[r.get("layer", "?")] = layers.get(r.get("layer", "?"), 0) + 1
         st = {
             "server": "matryoshka-mmi",
             "version": __version__,

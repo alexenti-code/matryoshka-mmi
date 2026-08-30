@@ -1,8 +1,9 @@
-# Matryoshka MMI — Specification v0.3
+# Matryoshka MMI — Specification
 
 **Product type:** local memory server (MCP stdio application) for coding agents.
 **License:** Apache-2.0. **Runtime:** Python 3.10+, stdlib only, zero dependencies.
-**Single source of truth for behaviour:** this document.
+**Single source of truth for behaviour:** this document. It tracks the repo
+`VERSION` (no hardcoded spec version); spec and code change together.
 
 ## 1. What it is
 
@@ -40,8 +41,10 @@ Architecture roles (per Matryoshka MANIFEST):
   tagged releases (`v*`), each release = a git tag + GitHub Release.
 - **Verification:** every release carries its version in `VERSION` (repo root)
   and `__version__` (server). The installer stamps `~/.matryoshka/VERSION`.
-  Users verify provenance by the git tag; researchers cite the Zenodo DOI of
-  the matching release.
+  Provenance: the `git clone` path is verified by the git tag. The piped
+  `curl | bash` path installs the current `main` (no tag pinning, no
+  checksums) — use the clone path when provenance matters. Researchers cite
+  the Zenodo DOI of the matching release.
 - **Transport:** stdio, JSON-lines per MCP protocol version 2024-11-05.
   No network listeners, no open ports. Outbound: one version-string check per
   day (see §6), disabled with `MMI_NO_UPDATE_CHECK=1`.
@@ -50,10 +53,11 @@ Architecture roles (per Matryoshka MANIFEST):
 
 | Tool | Act | Semantics |
 |---|---|---|
-| `matryoshka_tick` | TICK | accept the working beat; record priorities |
+| `matryoshka_tick` | TICK | accept the working beat; record priorities. Written to the time log `TICKS.log`, **not** to Φ; READ does not return ticks (write-only beat log in this version) |
 | `matryoshka_write` | WRITE | conscious remembering; fields: content (required), layer, valid_time, source |
-| `matryoshka_read` | READ | explicit lookup only: `ids`, or `from/to` time range, or `last N` |
-| `matryoshka_status` | STATUS | self-report: version, record counts per layer, storage path |
+| `matryoshka_repeat` | REPEAT | conscious re-learning of an existing WRITE record (error on a missing/non-WRITE id); appends a NEW record with `refs: [id]`; each repeat doubles the original trace's signal |
+| `matryoshka_read` | READ | explicit lookup only: `ids`, or `from/to` time range, or `last N`; every returned record carries a computed `weight` |
+| `matryoshka_status` | STATUS | self-report: version, record counts per layer (WRITE records), storage path, dials, friction model, repeat count |
 
 
 ## 3.1. Memory dials (v0.4.0)
@@ -76,10 +80,12 @@ continuous, no thresholds on content, no scoring, no triggers.
   *when*, by `record_time`; exactly as `temperature` does not decide *what* to
   say.
 
-## 3.2. Decay and forgetting (roadmap to v0.5)
+## 3.2. Decay and forgetting
 
-The current public executor (v0.3) is a symbolic prototype: records are
-stored verbatim in a journal. The theory (THEORY.md v2.0 — "a layer is a
+The current public executor is a symbolic prototype: records are stored
+verbatim in a journal, and decay is computed symbolically (the `weight`
+shown on read); the multi-timescale plastic substrate stays the research
+target. The theory (THEORY.md v2.0 — "a layer is a
 rate, not a place") defines the target physics of forgetting:
 
 - one write puts the trace into ALL temporal components (fast, medium, slow)
@@ -93,7 +99,7 @@ rate, not a place") defines the target physics of forgetting:
 - the owner sets the physics (memory volume, forgetting_tempo, write_gain —
   the "temperature class" of memory), never the content.
 
-### Implementation of friction (v0.5, symbolic journal)
+### Friction implementation (symbolic journal, shipped)
 
 - `weight = (1 + repeats) · e^(−dt/τ)`; τ per layer (factory, seconds):
   beat 3600, episode 86400, day 604800, project 2592000, life 31536000.
@@ -128,6 +134,9 @@ is specified in the research repository (stand SPEC v0.2–v0.5, THEORY.md).
 }
 ```
 
+REPEAT records carry `act: "REPEAT"` and `refs: [id]` instead of a layer of
+their own; `source: "repeat"`.
+
 Invariants:
 
 1. **Append-only.** Records are never modified or deleted; new information is
@@ -146,7 +155,7 @@ Invariants:
 - The agent informs the user; the user applies by re-running `install.sh`.
 - Opt-out: `MMI_NO_UPDATE_CHECK=1`.
 
-## 6. Out of scope for MMI v0.3
+## 6. Out of scope for the public executor
 
 - Vector/semantic retrieval (the model reads, it does not query an index).
 - Consolidation of regions, rank-1 writes inside the model graph (research

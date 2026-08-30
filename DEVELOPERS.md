@@ -19,7 +19,7 @@ acts (TICK/WRITE/READ/STATUS) over an append-only bi-temporal journal
 | `VERSION` | root version file; the daily update check fetches exactly this |
 | `SPEC.md` | canonical behaviour spec. Code and spec change together |
 | `RECOMMENDED-AGENTS.md` | supported agents; **empirical model minimum: 12B+** |
-| `MONETIZATION.md` | proposals only. Do NOT implement any of it without the owner's explicit instruction |
+| monetization proposals | live locally in `.dev-exchange/MONETIZATION-local.md` (not in the repo). Proposals only. Do NOT implement any of it without the owner's explicit instruction |
 | `NAME.md` | name/trademark/patent analysis (decision: keep the name, no patent) |
 
 ## Hard rules
@@ -84,7 +84,8 @@ through the normal release procedure and the owner's consent.
 
 ## Release procedure
 
-1. Bump `__version__` in `mmi_mcp.py` and root `VERSION` (keep equal).
+1. Bump `__version__` in `mmi_mcp.py`, root `VERSION`, and the `version`
+   field in `.zenodo.json` (keep all three in sync).
 2. Sandbox test: install → protocol handshake → uninstall (all clean).
 3. Commit → tag `vX.Y.Z` → push → `gh release create vX.Y.Z`.
 

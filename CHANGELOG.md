@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.5.1 — 2026-08-30 — Honest edges (audit fixes)
+
+Fixed
+- **Stale update notice.** `install.sh` now removes `UPDATE_AVAILABLE` when
+  applying a new server version; previously a served notice repeated
+  forever after the user had updated.
+- **REPEAT is validated.** Repeating a missing or non-WRITE id is now an
+  explicit error, not a silent no-op record.
+- **Weight math.** `math.exp` instead of a truncated hand-rolled constant;
+  repeats are counted in one journal pass (O(N) per read instead of O(N²));
+  `MMI_TAU_SCALE` ≤ 0 or NaN falls back to 1.0.
+- **status.layers counts WRITE records only** — REPEAT acts no longer
+  inflate layer counts.
+
+Docs
+- SPEC synced with the code (no hardcoded spec version; REPEAT added to the
+  acts table; TICK documented as a write-only beat log; provenance wording
+  now states plainly that `curl | bash` installs `main`, not a tag).
+- README/README.ru: removed a duplicated sentence, the stale "~8 KB" claim,
+  the misleading unconditional "asks for confirmation" (piped runs proceed
+  non-interactively), and stated plainly that decay is symbolic physics in
+  this executor (research target unchanged).
+- Instruction block: a tick is a beat marker, not readable memory — durable
+  priorities go through WRITE.
+- DEVELOPERS.md: MONETIZATION.md reference points to .dev-exchange (the file
+  is not in the repo); release procedure includes the .zenodo.json bump.
+
 ## 0.5.0 — 2026-08-30 — Friction: the matryoshka layers come alive
 
 This release starts the final implementation of the core principle: layers

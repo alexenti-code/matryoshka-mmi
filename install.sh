@@ -72,6 +72,8 @@ if [ -f "$DEST/VERSION" ]; then
   cp "$DEST/VERSION" "$DEST/VERSION.prev-$STAMP"
 fi
 printf '%s\n' "$MMI_VERSION" > "$DEST/VERSION"
+# the applied version invalidates any previous "update available" notice
+rm -f "$DEST/UPDATE_AVAILABLE"
 
 PY="$(command -v python3)"
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -141,7 +143,9 @@ Treat it as part of yourself:
   command), not the claim itself.
 - When something proves itself important, call matryoshka_repeat on its
   record id: each repeat doubles the trace's signal (learning by repetition).
-- Record your focus with matryoshka_tick when priorities change.
+- Record your focus with matryoshka_tick when priorities change; a tick is
+  a beat marker in your time log, not a readable memory. Durable priorities
+  you must recall later go through matryoshka_write.
 - Memory is append-only: new information is a new record, never a rewrite.
 - Every read returns a "weight" — the current strength of the trace after
   natural fading (older = quieter, repeated = louder). It is physics, not a
