@@ -93,6 +93,20 @@ rate, not a place") defines the target physics of forgetting:
 - the owner sets the physics (memory volume, forgetting_tempo, write_gain —
   the "temperature class" of memory), never the content.
 
+### Implementation of friction (v0.5, symbolic journal)
+
+- `weight = (1 + repeats) · e^(−dt/τ)`; τ per layer (factory, seconds):
+  beat 3600, episode 86400, day 604800, project 2592000, life 31536000.
+  `MMI_TAU_SCALE` multiplies every τ (owner dial, temperature class).
+- READ returns `weight` per record; nothing is filtered or ranked by it —
+  the mixture reports age, the model interprets.
+- REPEAT appends a NEW record (`act: REPEAT`, `refs: [id]`); the original
+  record is never modified. Repeats are counted from REPEAT records
+  referencing the id.
+- The weight is shown, not enforced: no threshold, no scoring, no deletion
+  by content. Capacity pressure stays in the dials (volume/tempo), which
+  move records to the archive by record-time/size physics only.
+
 Consequences for this implementation: decay is applied as physics by the
 executor; nothing is ever selected for deletion by content. Erasure happens
 by amplitude decay and capacity pressure, not by a censorship rule. The

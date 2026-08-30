@@ -116,7 +116,7 @@ Three things are given to the instance — and never taken back: **time** (its o
 (a plastic substrate it owns). Everything else here — acts, dials, the archive — is just physics
 serving those three.
 
-## The three acts
+## The acts
 
 The agent performs memory acts; the executor never decides anything (no
 scoring, no relevance, no vectors):
@@ -125,13 +125,23 @@ scoring, no relevance, no vectors):
 |---|---|---|
 | `matryoshka_tick` | TICK | accept the working beat, record priorities |
 | `matryoshka_write` | WRITE | conscious act of remembering (append-only) |
+| `matryoshka_repeat` | REPEAT | conscious re-learning; each repeat doubles the trace signal |
 | `matryoshka_read` | READ | look into your own diary by ids / time range / last N |
 
 Every record is bi-temporal: `valid_time` (when it was true in the world) and
-`record_time` (when the instance learned it). Forgetting is physics, not
-censorship: traces decay over time (like human memory), and the agent can
-strengthen what matters by repetition — the same physics is specified in the
-theory ("a layer is a rate, not a place"). Nothing is ever deleted by content.
+`record_time` (when the instance learned it).
+
+**Layers are speeds, not places — the matryoshka principle.** A memory trace
+lives on all timescales at once and decays continuously:
+`weight = (1 + repeats) · e^(−dt/τ)`. A `beat` trace quiets in hours, an
+`episode` in a day, a `life` trace stays for years — fresh traces nest inside
+slow ones, like a matryoshka. Every read returns the current `weight`:
+recent memories come back loud, old ones quiet — and the mixture itself tells
+the model the age of a memory. The only act that fights the fading is
+REPEAT: the model re-learns what proved important, doubling the signal each
+time. Nothing is ever deleted by content; decay and repetition are physics,
+the same way `temperature` is physics for generation. The owner sets the
+constants (e.g. `MMI_TAU_SCALE`), the model owns the meaning.
 
 ## Requirements
 

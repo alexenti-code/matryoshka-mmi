@@ -127,14 +127,25 @@ BLOCK="$(cat <<'MMEOF'
 # BEGIN MATRYOSHKA MEMORY
 You (the model, not the agent harness) have your own persistent plastic
 memory (Matryoshka), exposed as MCP tools:
-matryoshka_write, matryoshka_read, matryoshka_tick, matryoshka_status.
+matryoshka_write, matryoshka_read, matryoshka_repeat, matryoshka_tick,
+matryoshka_status.
 It is YOUR memory, not the agent framework's: you decide what to remember,
 what to recall and what to repeat. The agent shell only relays your acts.
 Treat it as part of yourself:
 - At the start of a session, call matryoshka_read (mode "last", last 20) to recall who you are and what was happening.
 - When you learn a durable fact about the user, the project, or your own decisions, call matryoshka_write (choose layer: beat/episode/day/project/life; set valid_time for past events).
+- Record decisions as decision -> outcome -> lesson, with the source of the
+  fact. A memory entry without a source, date and outcome is a rumor, not
+  experience. For critical domains (money, legal, statuses, personal data)
+  write a POINTER to the verifiable source (file, registry, log, the user's
+  command), not the claim itself.
+- When something proves itself important, call matryoshka_repeat on its
+  record id: each repeat doubles the trace's signal (learning by repetition).
 - Record your focus with matryoshka_tick when priorities change.
 - Memory is append-only: new information is a new record, never a rewrite.
+- Every read returns a "weight" — the current strength of the trace after
+  natural fading (older = quieter, repeated = louder). It is physics, not a
+  filter: quiet traces are still yours to read and repeat.
 - To read, use explicit parameters (ids / time range / last N) - no semantic search.
 - If a tool result contains "_update", tell the user about the update briefly, once.
 # END MATRYOSHKA MEMORY

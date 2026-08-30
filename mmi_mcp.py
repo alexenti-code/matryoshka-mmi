@@ -12,7 +12,7 @@ import os
 import sys
 import urllib.request
 
-__version__ = "0.4.2"
+__version__ = "0.5.0"
 
 HOME_DIR = os.path.expanduser("~/.matryoshka")
 PHI = os.path.join(HOME_DIR, "PHI.jsonl")
@@ -31,6 +31,20 @@ ARCHIVE = os.path.join(HOME_DIR, "PHI-archive.jsonl")
 #                             id/range; recency reads see the active journal only.
 VOLUME_MB = int(os.environ.get("MMI_MEMORY_VOLUME_MB", "0") or 0)
 TEMPO_DAYS = int(os.environ.get("MMI_FORGETTING_TEMPO_DAYS", "0") or 0)
+
+# Friction (v0.5) — decay physics, the "layer is a speed" principle.
+# Each layer is a time constant tau: the same trace fades at different
+# speeds; REPEAT re-amplifies (each repeat doubles the signal, THEORY.md).
+# Continuous physics, no content decisions — the temperature class.
+# Owner-settable: MMI_TAU_SCALE multiplies every tau (2.0 = forgets 2x slower).
+TAU_SCALE = float(os.environ.get("MMI_TAU_SCALE", "1.0") or 1.0)
+TAU = {  # seconds; factory settings, documented in SPEC.md
+    "beat":    1 * 3600,        # hours
+    "episode": 1 * 86400,       # a day
+    "day":     7 * 86400,       # a week
+    "project": 30 * 86400,      # weeks..month
+    "life":    365 * 86400,     # a year scale
+}
 REMOTE_VERSION_URL = "https://raw.githubusercontent.com/alexenti-code/matryoshka-mmi/main/VERSION"
 
 
@@ -156,6 +170,24 @@ TOOLS = [
             },
         },
     },
+    {
+        "name": "matryoshka_repeat",
+        "description": (
+            "Matryoshka memory act REPEAT: conscious re-learning of an "
+            "existing record (like learning a poem by heart). Creates a NEW "
+            "record referencing the original; the original trace gains "
+            "signal (doubles per repeat). Use when you decide a memory is "
+            "worth keeping stronger. History is never rewritten."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "integer", "description": "Id of the record to re-learn"},
+                "note": {"type": "string", "description": "Optional: what exactly you re-learned"},
+            },
+            "required": ["id"],
+        },
+    },
 ]
 
 
@@ -261,6 +293,51 @@ def act_write(content, layer="episode", valid_time=None, source="dialogue") -> d
     return _append(PHI, rec)
 
 
+def _repeats_of(rec_id) -> int:
+    """REPEAT act count for a record — counted from REPEAT records
+    referencing it (append-only: repeats are new records, never edits)."""
+    return sum(1 for r in _load(PHI)
+               if r.get("act") == "REPEAT" and rec_id_ok(r, rec_id))
+
+
+def rec_id_ok(rec, rid):
+    return rid in (rec.get("refs") or [])
+
+
+def _weight(rec) -> float:
+    """Current trace strength: (1 + repeats) * exp(-dt/tau[layer]).
+
+    Pure friction physics shown on read. Nothing is filtered, ranked or
+    dropped by it: the number only tells the model how loud the trace
+    still is — like a mixture that itself reports its age (THEORY.md)."""
+    if rec.get("act") == "TICK":
+        return 1.0
+    try:
+        t0 = datetime.datetime.fromisoformat(rec.get("record_time", now()))
+        dt = max(0.0, (datetime.datetime.now().astimezone() - t0).total_seconds())
+    except (ValueError, TypeError):
+        dt = 0.0
+    tau = TAU.get(rec.get("layer", "episode"), TAU["episode"]) * TAU_SCALE
+    n = _repeats_of(rec.get("id")) if rec.get("act") == "WRITE" else 0
+    return round((1 + n) * pow(2.718281828, -dt / tau), 4)
+
+
+def act_repeat(rec_id, note=None) -> dict:
+    """Conscious re-learning: a NEW record referencing the original.
+    History is never rewritten; the original trace gains signal."""
+    rec = {
+        "id": _next_id(PHI),
+        "record_time": now(),
+        "valid_time": now(),
+        "layer": "beat",
+        "act": "REPEAT",
+        "refs": [rec_id],
+        "content": note or "",
+        "source": "repeat",
+    }
+    return _append(PHI, rec)
+
+
 def act_read(mode="last", ids=None, frm=None, to=None, last=10):
     recs = _load(PHI)
     if mode in ("ids", "range"):
@@ -274,13 +351,15 @@ def act_read(mode="last", ids=None, frm=None, to=None, last=10):
         recs = [r for r in recs if in_range(r)]
     else:
         recs = recs[-(last or 10):]
-    return recs
+    return [dict(r, weight=_weight(r)) for r in recs]
 
 
 def call_tool(name, args):
     archive_pass()
     if name == "matryoshka_tick":
         return act_tick(args.get("note"), args.get("priorities"))
+    if name == "matryoshka_repeat":
+        return act_repeat(args["id"], args.get("note"))
     if name == "matryoshka_write":
         return act_write(
             args["content"], args.get("layer", "episode"),
@@ -302,7 +381,12 @@ def call_tool(name, args):
             "append_only": True,
             "bi_temporal": True,
             "dials": {"memory_volume_mb": VOLUME_MB or "unlimited",
-                      "forgetting_tempo_days": TEMPO_DAYS or "never"},
+                      "forgetting_tempo_days": TEMPO_DAYS or "never",
+                      "tau_scale": TAU_SCALE},
+            "friction": {"model": "(1+repeats)*exp(-dt/tau)",
+                         "tau_hours": {k: v // 3600 for k, v in TAU.items()},
+                         "repeats_total": sum(
+                             1 for r in _load(PHI) if r.get("act") == "REPEAT")},
         }
         n = _update_notice()
         if n:
