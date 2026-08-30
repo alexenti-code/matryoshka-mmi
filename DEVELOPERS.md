@@ -15,7 +15,7 @@ acts (TICK/WRITE/READ/STATUS) over an append-only bi-temporal journal
 |---|---|
 | `mmi_mcp.py` | the whole server: MCP stdio loop, 4 tools, update check. Read it fully before editing |
 | `install.sh` | installer: stamps `~/.matryoshka/`, registers the server in detected agents (claude/opencode/prime-agent), injects the instruction block. Asks confirmation when interactive |
-| `uninstall.sh` | full removal. Keep it in sync with install.sh changes |
+| `uninstall.sh` | removes the program; memory data is KEPT by default (moved to `~/.matryoshka-removed-<ts>/`); `--purge` deletes all, interactive only. Keep in sync with install.sh |
 | `VERSION` | root version file; the daily update check fetches exactly this |
 | `SPEC.md` | canonical behaviour spec. Code and spec change together |
 | `RECOMMENDED-AGENTS.md` | supported agents; **empirical model minimum: 12B+** |
@@ -44,7 +44,43 @@ acts (TICK/WRITE/READ/STATUS) over an append-only bi-temporal journal
      instances with zero shared data.
    - No release (tag, push, GitHub Release) without a clean sandbox pass:
      install → handshake → uninstall.
+   - In every sandbox pass set `MMI_NO_PRIME_AGENT=1`: prime-agent ignores
+     HOME isolation, so a sandboxed install otherwise rewrites the REAL
+     registration in the developer's (or anyone's) global config.
 7. Russian communication with the owner; direct, no fluff.
+
+## Memory hygiene doctrine (owner-approved analysis, 30.08.2026)
+
+Derived from the vibe-coding production article (see the owner's knowledge base,
+`Знания/Статьи/2026-08-30 Выводы для Матрёшки — память модели как production-система.md`).
+Core claim: the model's own memory is a **production system**, not a feature.
+Treat it accordingly when touching `mmi_mcp.py`, `install.sh` (instruction
+block) or `SPEC.md`:
+
+1. **Source-anchored entries.** A memory entry without a source, a date, and
+   an outcome is not experience — it is a rumor on disk. The instruction block
+   must push the model toward recording decision → outcome → lesson, not
+   plausible narratives.
+2. **Positive feedback is the main new risk.** A self-managed memory can
+   confirm its own conclusions (wrote a conclusion → it shaped a decision →
+   "it worked" → recorded confirmation). Anchor critical entries to externally
+   verifiable facts (registries, logs, owner's commands), never to the model's
+   own narratives.
+3. **Owner veto must be a mechanism, not a habit.** Append-only journal +
+   archive; no silent rewrites of history; the journal stays human-readable
+   JSONL on the owner's machine. Critical domains (money, legal, statuses,
+   PII): memory holds a pointer to the source of truth, never the truth itself.
+4. **Privacy invariant extends to content:** no PII, secrets, or tokens inside
+   `PHI.jsonl` — the model writes memory automatically, "by itself".
+5. **Verification loop exists:** periodically sample entries and check them
+   against reality; stale entries get marked, not left to rot silently.
+   `TICKS.log` is observability — it must be read, not only written.
+6. **Recovery:** memory journals are backed up / restorable like any
+   production data; rollback of a "poisoned" entry must be possible.
+
+These principles are doctrine for developer decisions. They do not change the
+public instruction block on their own — any spec/instruction change goes
+through the normal release procedure and the owner's consent.
 
 ## Release procedure
 
