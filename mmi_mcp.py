@@ -12,7 +12,7 @@ import os
 import sys
 import urllib.request
 
-__version__ = "0.4.0"
+__version__ = "0.4.2"
 
 HOME_DIR = os.path.expanduser("~/.matryoshka")
 PHI = os.path.join(HOME_DIR, "PHI.jsonl")
@@ -190,6 +190,20 @@ def _next_id(path: str) -> int:
     return max((r.get("id", 0) for r in recs), default=0) + 1
 
 
+def _rewrite(path, recs):
+    """Atomic journal rewrite: tmp file + fsync + os.replace.
+
+    A crash mid-rewrite can never truncate the journal: either the old
+    file is intact or the new one is fully in place."""
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        for r in recs:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
 def archive_pass():
     """Mechanical archival: size cap and record-time tempo. Time/size physics
     only — no content decisions, no scoring. Append-only preserved: records
@@ -207,9 +221,7 @@ def archive_pass():
         if drop:
             for r in sorted(drop, key=lambda x: x.get("id", 0)):
                 _append(ARCHIVE, r)
-            with open(PHI, "w", encoding="utf-8") as f:
-                for r in sorted(keep, key=lambda x: x.get("id", 0)):
-                    f.write(json.dumps(r, ensure_ascii=False) + "\n")
+            _rewrite(PHI, sorted(keep, key=lambda x: x.get("id", 0)))
             moved = len(drop)
     if TEMPO_DAYS > 0:
         cutoff = (datetime.datetime.now().astimezone()
@@ -220,10 +232,7 @@ def archive_pass():
             for r in old:
                 _append(ARCHIVE, r)
             keep_ids = {r.get("id") for r in old}
-            with open(PHI, "w", encoding="utf-8") as f:
-                for r in recs:
-                    if r.get("id") not in keep_ids:
-                        f.write(json.dumps(r, ensure_ascii=False) + "\n")
+            _rewrite(PHI, [r for r in recs if r.get("id") not in keep_ids])
             moved += len(old)
     return moved
 

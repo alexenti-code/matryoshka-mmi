@@ -36,14 +36,34 @@ and asks for confirmation. It only ever:
    agent's instruction file (`~/.claude/CLAUDE.md` etc.), teaching the agent
    when to read and write its memory.
 
-That is all. No other files are read or modified. Full removal:
+That is all. No other files are read or modified. Everything the installer
+replaces (an existing server copy, an existing MCP entry, an existing
+instruction block) is backed up next to the original first, and the
+replacement is announced.
+
+## Uninstall
+
+The program is replaceable; your model's memory is not.
 
 ```bash
-claude mcp remove matryoshka --scope user   # if you use Claude Code
-prime-agent mcp remove matryoshka           # if you use Prime Agent
-# + delete the "matryoshka" entry in ~/.config/opencode/opencode.json, if you use OpenCode
-# + delete the MATRYOSHKA MEMORY block from ~/.claude/CLAUDE.md
-rm -rf ~/.matryoshka
+bash uninstall.sh
+```
+
+Removes the program: the server, the `matryoshka` entries in agent configs
+(configs backed up first), and the instruction block from the instruction
+files (backed up too). Your memory data (`PHI.jsonl`, `PHI-archive.jsonl`,
+`TICKS.log`) is **kept** — moved to `~/.matryoshka-removed-<timestamp>/`,
+and the path is printed. To restore after a future install:
+
+```bash
+mv ~/.matryoshka-removed-<timestamp>/* ~/.matryoshka/
+```
+
+If you truly want everything gone, including the memory your model has
+written, there is one explicit, interactive-only command:
+
+```bash
+bash uninstall.sh --purge   # asks you to type PURGE; refuses when piped
 ```
 
 ## Install
@@ -134,7 +154,7 @@ itself.**
 bash install.sh    # re-run: updates the server, keeps your memory data
 ```
 
-Full removal in one step:
+Uninstall (keeps memory data; `--purge` deletes all, interactive only):
 
 ```bash
 bash uninstall.sh

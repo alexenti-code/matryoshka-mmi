@@ -1,21 +1,40 @@
 #!/usr/bin/env bash
 # Matryoshka MMI installer — one command, any MCP-capable agent.
-# Usage:  bash install.sh
+# Usage:  bash install.sh        (or: curl -fsSL .../install.sh | bash)
+#
+# Safety contract:
+#   - the PROGRAM is replaceable; the user's memory data is not.
+#     PHI.jsonl / PHI-archive.jsonl / TICKS.log are never touched;
+#   - everything this script replaces (server, config entries, instruction
+#     blocks) is backed up next to the original first, and the replacement
+#     is announced before it happens.
 set -euo pipefail
 
-MMI_VERSION="0.2.0"
+RAW_BASE="${MMI_RAW_BASE:-https://raw.githubusercontent.com/alexenti-code/matryoshka-mmi/main}"
 DEST="$HOME/.matryoshka"
-SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 SERVER="$DEST/mmi_mcp.py"
+STAMP="$(date +%Y%m%d-%H%M%S)"
+export STAMP
+
+# Source dir exists only when run from a checked-out copy; empty when piped.
+if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]:-}" ]; then
+  SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+  SRC_DIR=""
+fi
 
 echo "== Matryoshka MMI installer =="
 echo ""
 echo "This runs on YOUR machine and only touches YOUR files:"
-echo "  create/replace  $DEST/mmi_mcp.py        (the memory server)"
-echo "  add entry       'matryoshka' into each detected agent's MCP config"
-echo "  append block    'BEGIN/END MATRYOSHKA MEMORY' into agent instruction files"
-echo "  storage         $DEST/PHI.jsonl  (created later, by you/your agent)"
-echo "Nothing is sent anywhere. Uninstall: see README."
+echo "  create/replace  $DEST/mmi_mcp.py        (the memory server;"
+echo "                           the previous copy is kept as mmi_mcp.py.prev-$STAMP)"
+echo "  add/replace     'matryoshka' entry in each detected agent's MCP config"
+echo "                           (the previous entry is printed; OpenCode config backed up)"
+echo "  append/replace  'BEGIN/END MATRYOSHKA MEMORY' block in agent instruction files"
+echo "                           (files with an existing block are backed up first)"
+echo "  storage         $DEST/PHI.jsonl  (your memory data — NEVER touched by install"
+echo "                           or uninstall)"
+echo "Nothing is sent anywhere. Uninstall: see README — it keeps your memory data."
 if [ -t 0 ]; then
   printf "Proceed? [y/N] "
   read -r REPLY
@@ -23,36 +42,66 @@ if [ -t 0 ]; then
     y|Y) ;;
     *) echo "Aborted, nothing changed."; exit 1 ;;
   esac
+else
+  echo "(non-interactive run: proceeding; every replacement is backed up)"
 fi
 echo ""
 
 mkdir -p "$DEST"
-if [ -f "$SRC_DIR/mmi_mcp.py" ]; then
+
+# --- the server: replace, but keep the previous copy ---
+if [ -f "$SERVER" ]; then
+  cp "$SERVER" "$DEST/mmi_mcp.py.prev-$STAMP"
+  echo "previous server backed up -> mmi_mcp.py.prev-$STAMP"
+fi
+if [ -n "$SRC_DIR" ] && [ -f "$SRC_DIR/mmi_mcp.py" ]; then
   cp "$SRC_DIR/mmi_mcp.py" "$SERVER"
 else
-  curl -fsSL "${MMI_RAW_BASE:-https://raw.githubusercontent.com/alexenti-code/matryoshka-mmi/main}/mmi_mcp.py" -o "$SERVER"
+  curl -fsSL "$RAW_BASE/mmi_mcp.py" -o "$SERVER"
 fi
 chmod +x "$SERVER"
 echo "server -> $SERVER"
 
+# --- version stamp: single source of truth is the repo's VERSION file ---
+if [ -n "$SRC_DIR" ] && [ -f "$SRC_DIR/VERSION" ]; then
+  MMI_VERSION="$(cat "$SRC_DIR/VERSION")"
+else
+  MMI_VERSION="$(curl -fsSL "$RAW_BASE/VERSION")"
+fi
+if [ -f "$DEST/VERSION" ]; then
+  cp "$DEST/VERSION" "$DEST/VERSION.prev-$STAMP"
+fi
 printf '%s\n' "$MMI_VERSION" > "$DEST/VERSION"
 
 PY="$(command -v python3)"
 have() { command -v "$1" >/dev/null 2>&1; }
 
 if have claude; then
+  "$PY" - <<'PYOLD' || true
+import json, os
+p = os.path.expanduser("~/.claude.json")
+try:
+    e = json.load(open(p)).get("mcpServers", {}).get("matryoshka")
+    if e:
+        print("existing Claude Code entry will be replaced:", json.dumps(e))
+except Exception:
+    pass
+PYOLD
   claude mcp remove matryoshka --scope user >/dev/null 2>&1 || true
   claude mcp add matryoshka --scope user -- "$PY" "$SERVER" && echo "registered: Claude Code (your ~/.claude.json)"
 fi
 
 if have opencode; then
-  python3 - "$HOME/.config/opencode/opencode.json" "$SERVER" "$PY" <<'PYEOF'
-import json, os, sys
-cfg_path, server, py = sys.argv[1:4]
+  python3 - "$HOME/.config/opencode/opencode.json" "$SERVER" "$PY" "$STAMP" <<'PYEOF'
+import json, os, shutil, sys
+cfg_path, server, py, stamp = sys.argv[1:5]
 os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
 cfg = {}
 if os.path.exists(cfg_path):
     cfg = json.load(open(cfg_path))
+    shutil.copy2(cfg_path, cfg_path + ".bak-mmi-" + stamp)
+if cfg.get("mcp", {}).get("matryoshka"):
+    print("existing OpenCode entry will be replaced (backup: opencode.json.bak-mmi-" + stamp + ")")
 cfg.setdefault("mcp", {})
 cfg["mcp"]["matryoshka"] = {"type": "local", "command": [py, server]}
 json.dump(cfg, open(cfg_path, "w"), indent=2, ensure_ascii=False)
@@ -60,7 +109,10 @@ PYEOF
   echo "registered: OpenCode (~/.config/opencode/opencode.json)"
 fi
 
-if have prime-agent; then
+# prime-agent stores its MCP list in a global config and IGNORES HOME
+# isolation: a sandboxed test run would rewrite the real registration.
+# Opt out with MMI_NO_PRIME_AGENT=1 (sandboxes MUST set it).
+if have prime-agent && [ -z "${MMI_NO_PRIME_AGENT:-}" ]; then
   prime-agent mcp remove matryoshka >/dev/null 2>&1 || true
   if prime-agent mcp add matryoshka -- "$PY" "$SERVER" >/dev/null 2>&1; then
     echo "registered: Prime Agent"
@@ -75,7 +127,7 @@ BLOCK="$(cat <<'MMEOF'
 # BEGIN MATRYOSHKA MEMORY
 You (the model, not the agent harness) have your own persistent plastic
 memory (Matryoshka), exposed as MCP tools:
-matryoshka_write, matryoshka_read, matryoshka_tick.
+matryoshka_write, matryoshka_read, matryoshka_tick, matryoshka_status.
 It is YOUR memory, not the agent framework's: you decide what to remember,
 what to recall and what to repeat. The agent shell only relays your acts.
 Treat it as part of yourself:
@@ -94,6 +146,8 @@ inject() {
   mkdir -p "$(dirname "$f")"
   touch "$f"
   if grep -q "$BLOCK_START" "$f" 2>/dev/null; then
+    cp "$f" "$f.bak-mmi-$STAMP"
+    echo "instruction block updated (previous copy: $f.bak-mmi-$STAMP)"
     python3 - "$f" "$BLOCK" <<'PYEOF2'
 import sys
 p, block = sys.argv[1], sys.argv[2]
@@ -120,4 +174,7 @@ echo ""
 echo "Updates: the server checks GitHub for a new version once a day"
 echo "(no data is uploaded; disable with MMI_NO_UPDATE_CHECK=1)."
 echo "When an update is available your agent will tell you — you apply it"
-echo "by re-running this script. Nothing updates itself."
+echo "by re-running this script. Nothing updates itself; re-running keeps"
+echo "your memory data and backs up the previous server copy."
+echo "Uninstall: bash uninstall.sh (keeps memory data; --purge deletes all,"
+echo "interactive confirmation required)."
