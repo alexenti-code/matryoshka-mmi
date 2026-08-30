@@ -89,6 +89,13 @@ beings with different biographies. That is the point: memory that is lived,
 not installed. The full theory: [MANIFEST](https://github.com/alexenti-code/matryoshka)
 and THEORY.md in the research repository.
 
+## Principles
+
+Three things are given to the instance — and never taken back: **time** (its own working beats),
+**trust** (every semantic decision about memory belongs to the core), and **memory matter**
+(a plastic substrate it owns). Everything else here — acts, dials, the archive — is just physics
+serving those three.
+
 ## The three acts
 
 The agent performs memory acts; the executor never decides anything (no
