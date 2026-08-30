@@ -42,9 +42,9 @@ work (long multi-session agent, real tasks):
 
 | Model | Parameters | Status |
 |---|---|---|
-| DeepSeek V4 Flash 0731 | 284B total / 13B active (MoE, verified) | most-used model, ~15.6k sessions of daily use |
+| DeepSeek V4 Flash 0731 | 284B total / 13B active (MoE, verified) | primary daily working model |
 | DeepSeek V4 Pro 0813 | 1.6T total / 49B active (MoE, verified) | heavy reasoning |
-| GLM 5.3 Flash | not officially disclosed | verified in daily use, ~4.2k sessions (incl. its testing alias "ox-alpha") |
+| GLM 5.3 Flash | not officially disclosed | verified in daily use |
 | Muse Spark 1.2 Contributor | not officially disclosed | verified in daily use |
 | Qwen 3.7 Flash | not officially disclosed | verified in daily use (vision) |
 | MiMo V2.5 | not officially disclosed | verified in daily use (vision) |
