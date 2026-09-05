@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Matryoshka MMI — MCP server (prototype).
+"""PMI (Plastic Memory Interface, formerly MMI) — MCP server.
+
+Reference executor of PlastFormer (see plastformer/docs/ADR-001).
 
 Exposes the Matryoshka memory acts (TICK / WRITE / READ) as MCP tools.
 Any MCP-capable agent (Claude Code, OpenCode, Prime Agent) can use them.
@@ -13,7 +15,7 @@ import os
 import sys
 import urllib.request
 
-__version__ = "0.5.1"
+__version__ = "0.6.0"
 
 HOME_DIR = os.path.expanduser("~/.matryoshka")
 PHI = os.path.join(HOME_DIR, "PHI.jsonl")
@@ -48,6 +50,60 @@ TAU = {  # seconds; factory settings, documented in SPEC.md
     "project": 30 * 86400,      # weeks..month
     "life":    365 * 86400,     # a year scale
 }
+
+# Tick clock (v0.6.0, ADR-001 §5): MMI_CLOCK=ticks|wall, default wall.
+#   wall  — weight decays in wall-clock seconds (TAU above); record_time rules.
+#   ticks — weight decays in lived ticks (TAU_TICKS below); record_time and
+#           valid_time stay as audited stamps and do not affect the weight.
+# In ticks mode the STAND advances the counter (+1 per executed WRITE /
+# REPEAT / CONNECT / RECONCILE act); the model never ticks itself — a manual
+# matryoshka_tick call in ticks mode is a deprecated no-op.
+# MMI_TAU_TICKS: per-layer time constants in ticks. Formats:
+#   "beat=10,episode=50,day=200,project=1000,life=5000" or "10,50,200,1000,5000"
+#   (layer order: beat, episode, day, project, life). Default for E1 below.
+# MMI_INJECT_TOP=N: attach the N loudest traces by weight (no relevance,
+#   no content search) as a <<PMI>> block to tool results. 0 = off.
+TAU_TICKS_DEFAULT = {
+    "beat": 10,
+    "episode": 50,
+    "day": 200,
+    "project": 1000,
+    "life": 5000,
+}
+_LAYER_ORDER = ("beat", "episode", "day", "project", "life")
+
+
+def clock_mode() -> str:
+    mode = (os.environ.get("MMI_CLOCK", "wall") or "wall").strip().lower()
+    return mode if mode in ("ticks", "wall") else "wall"
+
+
+def tau_ticks() -> dict:
+    out = dict(TAU_TICKS_DEFAULT)
+    raw = (os.environ.get("MMI_TAU_TICKS", "") or "").strip()
+    if raw:
+        try:
+            if "=" in raw:
+                for part in raw.split(","):
+                    k, v = part.split("=", 1)
+                    k, v = k.strip(), float(v.strip())
+                    if k in out and v > 0:
+                        out[k] = v
+            else:
+                vals = [float(x.strip()) for x in raw.split(",")]
+                if len(vals) == 5 and all(v > 0 for v in vals):
+                    out = dict(zip(_LAYER_ORDER, vals))
+        except (ValueError, TypeError):
+            pass
+    scale = TAU_SCALE if TAU_SCALE > 0 else 1.0
+    return {k: v * scale for k, v in out.items()}
+
+
+def inject_top_n() -> int:
+    try:
+        return max(0, int(os.environ.get("MMI_INJECT_TOP", "0") or 0))
+    except (ValueError, TypeError):
+        return 0
 REMOTE_VERSION_URL = "https://raw.githubusercontent.com/alexenti-code/matryoshka-mmi/main/VERSION"
 
 
@@ -103,7 +159,9 @@ TOOLS = [
         "description": (
             "Matryoshka memory act TICK: accept the working beat and record "
             "current priorities (what to spend attention on). Call at the "
-            "start of a work session or when priorities change."
+            "start of a work session or when priorities change. "
+            "In tick-clock mode (MMI_CLOCK=ticks) the stand counts ticks "
+            "itself and this tool is a deprecated no-op."
         ),
         "inputSchema": {
             "type": "object",
@@ -171,6 +229,55 @@ TOOLS = [
                 "to": {"type": "string", "description": "ISO 8601 upper bound (record_time)"},
                 "last": {"type": "integer", "description": "Last N records"},
             },
+        },
+    },
+    {
+        "name": "matryoshka_connect",
+        "description": (
+            "PlastFormer act CONNECT: link existing records into one trace. "
+            "Creates a NEW record (act CONNECT, refs to the linked ids) with "
+            "your summary; the linked records are never modified. Use when "
+            "separate memories belong together."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "refs": {"type": "array", "items": {"type": "integer"},
+                         "description": "Ids of the records to link"},
+                "summary": {"type": "string",
+                            "description": "What the linked traces mean together"},
+                "layer": {
+                    "type": "string",
+                    "enum": ["beat", "episode", "day", "project", "life"],
+                    "description": "Memory layer for the link record",
+                },
+            },
+            "required": ["refs", "summary"],
+        },
+    },
+    {
+        "name": "matryoshka_reconcile",
+        "description": (
+            "PlastFormer act RECONCILE: record a clock-biography event "
+            "(e.g. a gap between lived ticks and wall-clock stamps). Creates "
+            "a NEW record (act RECONCILE) in a slow layer with refs to the "
+            "affected records. The past is never rewritten — the divergence "
+            "itself becomes a memory."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "note": {"type": "string",
+                         "description": "What diverged and how it was noticed"},
+                "refs": {"type": "array", "items": {"type": "integer"},
+                         "description": "Ids of the affected records (may be empty)"},
+                "layer": {
+                    "type": "string",
+                    "enum": ["beat", "episode", "day", "project", "life"],
+                    "description": "Slow layer for the record (default project)",
+                },
+            },
+            "required": ["note"],
         },
     },
     {
@@ -272,7 +379,28 @@ def archive_pass():
     return moved
 
 
+def tick_now() -> int:
+    """Lived ticks so far = number of records in TICKS.log."""
+    return len(_load(TICKS))
+
+
+def _auto_tick(note="stand exchange") -> dict:
+    """The stand counts one lived tick per executed storing act."""
+    return _append(TICKS, {
+        "id": _next_id(TICKS),
+        "record_time": now(),
+        "act": "TICK",
+        "note": note,
+        "priorities": [],
+    })
+
+
 def act_tick(note=None, priorities=None) -> dict:
+    if clock_mode() == "ticks":
+        # Deprecated in ticks mode: the stand advances the counter itself,
+        # the model never ticks. No record is appended.
+        return {"deprecated": True, "clock": "ticks", "tick": tick_now(),
+                "note": "tick is counted by the stand; this call changed nothing"}
     rec = {
         "id": _next_id(TICKS),
         "record_time": now(),
@@ -286,14 +414,18 @@ def act_tick(note=None, priorities=None) -> dict:
 def act_write(content, layer="episode", valid_time=None, source="dialogue") -> dict:
     rec = {
         "id": _next_id(PHI),
-        "record_time": now(),           # when the instance learned it
-        "valid_time": valid_time or now(),  # when it was true in the world
+        "record_time": now(),           # when the instance learned it (audit stamp)
+        "valid_time": valid_time or now(),  # when it was true in the world (audit stamp)
+        "record_tick": tick_now(),      # lived time: ticks so far
         "layer": layer,
         "act": "WRITE",
         "content": content,
         "source": source,
     }
-    return _append(PHI, rec)
+    out = _append(PHI, rec)
+    if clock_mode() == "ticks":
+        _auto_tick("write")
+    return out
 
 
 def _repeats_of(rec_id) -> int:
@@ -307,23 +439,36 @@ def rec_id_ok(rec, rid):
     return rid in (rec.get("refs") or [])
 
 
-def _weight(rec, repeats=0) -> float:
+def _weight(rec, repeats=0, n_now=None) -> float:
     """Current trace strength: (1 + repeats) * exp(-dt/tau[layer]).
 
     Pure friction physics shown on read. Nothing is filtered, ranked or
     dropped by it: the number only tells the model how loud the trace
     still is — like a mixture that itself reports its age (THEORY.md).
     `repeats` is passed in by the caller (counted in one journal pass);
-    the standalone default keeps the function honest for single records."""
+    the standalone default keeps the function honest for single records.
+    Clock: in wall mode dt is wall-clock seconds (record_time rules,
+    record_tick ignored); in ticks mode dt is lived ticks
+    (n_now - record_tick, wall stamps ignored)."""
     if rec.get("act") == "TICK":
         return 1.0
+    n = repeats if rec.get("act") == "WRITE" else 0
+    if clock_mode() == "ticks":
+        if n_now is None:
+            n_now = tick_now()
+        try:
+            dt = max(0.0, float(n_now) - float(rec.get("record_tick", 0)))
+        except (ValueError, TypeError):
+            dt = 0.0
+        tau = tau_ticks().get(rec.get("layer", "episode"),
+                              tau_ticks()["episode"])
+        return round((1 + n) * math.exp(-dt / tau), 4)
     try:
         t0 = datetime.datetime.fromisoformat(rec.get("record_time", now()))
         dt = max(0.0, (datetime.datetime.now().astimezone() - t0).total_seconds())
     except (ValueError, TypeError):
         dt = 0.0
     tau = TAU.get(rec.get("layer", "episode"), TAU["episode"]) * TAU_SCALE
-    n = repeats if rec.get("act") == "WRITE" else 0
     return round((1 + n) * math.exp(-dt / tau), 4)
 
 
@@ -342,13 +487,71 @@ def act_repeat(rec_id, note=None) -> dict:
         "id": _next_id(PHI),
         "record_time": now(),
         "valid_time": now(),
+        "record_tick": tick_now(),
         "layer": "beat",
         "act": "REPEAT",
         "refs": [rec_id],
         "content": note or "",
         "source": "repeat",
     }
-    return _append(PHI, rec)
+    out = _append(PHI, rec)
+    if clock_mode() == "ticks":
+        _auto_tick("repeat")
+    return out
+
+
+def _known_ids():
+    return {r.get("id") for r in _load(PHI) + _load(ARCHIVE)}
+
+
+def act_connect(refs, summary, layer="episode") -> dict:
+    """CONNECT: link existing records; sources are never touched."""
+    refs = list(refs or [])
+    if not refs:
+        raise ValueError("connect: refs must list at least one record id")
+    missing = [i for i in refs if i not in _known_ids()]
+    if missing:
+        raise ValueError(
+            f"connect: no record(s) with id(s) {missing} in the journal")
+    rec = {
+        "id": _next_id(PHI),
+        "record_time": now(),
+        "valid_time": now(),
+        "record_tick": tick_now(),
+        "layer": layer,
+        "act": "CONNECT",
+        "refs": refs,
+        "content": summary,
+        "source": "connect",
+    }
+    out = _append(PHI, rec)
+    if clock_mode() == "ticks":
+        _auto_tick("connect")
+    return out
+
+
+def act_reconcile(note, refs=None, layer="project") -> dict:
+    """RECONCILE: a clock-biography event in a slow layer; refs optional."""
+    refs = list(refs or [])
+    missing = [i for i in refs if i not in _known_ids()]
+    if missing:
+        raise ValueError(
+            f"reconcile: no record(s) with id(s) {missing} in the journal")
+    rec = {
+        "id": _next_id(PHI),
+        "record_time": now(),
+        "valid_time": now(),
+        "record_tick": tick_now(),
+        "layer": layer,
+        "act": "RECONCILE",
+        "refs": refs,
+        "content": note,
+        "source": "reconcile",
+    }
+    out = _append(PHI, rec)
+    if clock_mode() == "ticks":
+        _auto_tick("reconcile")
+    return out
 
 
 def act_read(mode="last", ids=None, frm=None, to=None, last=10):
@@ -370,7 +573,41 @@ def act_read(mode="last", ids=None, frm=None, to=None, last=10):
         recs = [r for r in recs if in_range(r)]
     else:
         recs = recs[-(last or 10):]
-    return [dict(r, weight=_weight(r, repeats.get(r.get("id"), 0))) for r in recs]
+    n_now = tick_now() if clock_mode() == "ticks" else None
+    return [dict(r, weight=_weight(r, repeats.get(r.get("id"), 0), n_now))
+            for r in recs]
+
+
+def inject_top(n=None) -> list:
+    """N loudest WRITE traces by weight only. No relevance, no content
+    search, no semantic index: pure amplitude ranking for the <<PMI>>
+    block (Arm C physics injection, E1 v1.1)."""
+    if n is None:
+        n = inject_top_n()
+    if n <= 0:
+        return []
+    n_now = tick_now() if clock_mode() == "ticks" else None
+    phi = _load(PHI)
+    repeats = {}
+    for r in phi:
+        if r.get("act") == "REPEAT":
+            for ref in (r.get("refs") or []):
+                repeats[ref] = repeats.get(ref, 0) + 1
+    scored = [( _weight(r, repeats.get(r.get("id"), 0), n_now), r)
+              for r in phi if r.get("act") == "WRITE"]
+    scored.sort(key=lambda t: t[0], reverse=True)
+    return [dict(r, weight=w) for w, r in scored[:n]]
+
+
+def pmi_block(n=None) -> str:
+    """Render the loudest-N traces as a <<PMI>> text block."""
+    top = inject_top(n)
+    lines = ["<<PMI>> loudest traces by weight (no relevance, no search)"]
+    for r in top:
+        lines.append(f"- [id={r.get('id')} layer={r.get('layer')} "
+                     f"weight={r.get('weight')}] {r.get('content', '')}")
+    lines.append("<</PMI>>")
+    return "\n".join(lines)
 
 
 def call_tool(name, args):
@@ -379,24 +616,35 @@ def call_tool(name, args):
         return act_tick(args.get("note"), args.get("priorities"))
     if name == "matryoshka_repeat":
         return act_repeat(args["id"], args.get("note"))
+    if name == "matryoshka_connect":
+        return act_connect(args["refs"], args["summary"],
+                           args.get("layer", "episode"))
+    if name == "matryoshka_reconcile":
+        return act_reconcile(args["note"], args.get("refs", []),
+                             args.get("layer", "project"))
     if name == "matryoshka_write":
         return act_write(
             args["content"], args.get("layer", "episode"),
             args.get("valid_time"), args.get("source", "dialogue"),
         )
     if name == "matryoshka_status":
-        import collections
         recs = _load(PHI)
         layers = {}   # WRITE records only: REPEAT records are acts, not layers
+        acts = {}
         for r in recs:
+            acts[r.get("act", "?")] = acts.get(r.get("act", "?"), 0) + 1
             if r.get("act") == "WRITE":
                 layers[r.get("layer", "?")] = layers.get(r.get("layer", "?"), 0) + 1
+        mode = clock_mode()
         st = {
             "server": "matryoshka-mmi",
             "version": __version__,
             "records": len(recs),
             "archived": len(_load(ARCHIVE)),
             "layers": layers,
+            "acts": acts,
+            "ticks": len(_load(TICKS)),
+            "clock": mode,
             "storage": PHI,
             "append_only": True,
             "bi_temporal": True,
@@ -405,19 +653,24 @@ def call_tool(name, args):
                       "tau_scale": TAU_SCALE},
             "friction": {"model": "(1+repeats)*exp(-dt/tau)",
                          "tau_hours": {k: v // 3600 for k, v in TAU.items()},
+                         "tau_ticks": tau_ticks(),
                          "repeats_total": sum(
                              1 for r in _load(PHI) if r.get("act") == "REPEAT")},
+            "inject_top": inject_top_n(),
         }
         n = _update_notice()
         if n:
             st["_update"] = n
         return st
     if name == "matryoshka_read":
-        return act_read(
+        out = act_read(
             args.get("mode", "last"), args.get("ids"),
             args.get("from"), args.get("to"), args.get("last", 10),
         )
-    raise ValueError(f"unknown tool {name}")
+    n_top = inject_top_n()
+    if n_top > 0:
+        out = {"records": out, "_pmi": pmi_block(n_top)}
+    return out
 
 
 # --- minimal MCP stdio loop -----------------------------------------------

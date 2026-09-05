@@ -1,4 +1,6 @@
-# Matryoshka MMI
+# Matryoshka MMI - PMI (Plastic Memory Interface)
+
+> PMI - Plastic Memory Interface, formerly MMI. This is the reference executor of PlastFormer (see plastformer/docs/ADR-001-plastformer-transition.md, section 5). Tool names, ~/.matryoshka/ paths and the append-only journal are unchanged.
 
 **Add a persistent plastic memory to your coding agent.**
 
@@ -124,10 +126,12 @@ scoring, no relevance, no vectors):
 
 | Tool | Act | Meaning |
 |---|---|---|
-| `matryoshka_tick` | TICK | accept the working beat, record priorities (written to the time log; not returned by READ) |
+| `matryoshka_tick` | TICK | accept the working beat (wall mode); deprecated no-op in tick-clock mode - the stand counts ticks itself |
 | `matryoshka_write` | WRITE | conscious act of remembering (append-only) |
 | `matryoshka_repeat` | REPEAT | conscious re-learning; each repeat doubles the trace signal |
-| `matryoshka_read` | READ | look into your own diary by ids / time range / last N |
+| `matryoshka_connect` | CONNECT | conscious linking of records with a summary; sources never modified |
+| `matryoshka_reconcile` | RECONCILE | clock-biography event in a slow layer; the past is never rewritten |
+| `matryoshka_read` | READ | look into your own diary by ids / time range / last N (+ optional <<PMI>> loudest-N block via MMI_INJECT_TOP) |
 
 Every record is bi-temporal: `valid_time` (when it was true in the world) and
 `record_time` (when the instance learned it).
@@ -143,6 +147,8 @@ REPEAT: the model re-learns what proved important, doubling the signal each
 time. Nothing is ever deleted by content; decay and repetition are physics,
 the same way `temperature` is physics for generation. The owner sets the
 constants (e.g. `MMI_TAU_SCALE`), the model owns the meaning.
+With MMI_CLOCK=ticks (required for the PlastFormer E1 protocol) traces age in lived ticks while wall-clock stamps stay as audit only; the stand advances one tick per storing act and the model never ticks itself. See SPEC.md, Tick clock.
+
 In this executor the decay is computed symbolically over the append-only
 journal (the `weight` on each read); the multi-timescale plastic substrate
 is the research target — see SPEC.md, "Decay and forgetting".

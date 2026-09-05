@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.6.0 - 2026-09-05 - PMI executor: tick clock, connect/reconcile, loudest-N
+
+Tick clock first (PlastFormer ADR-001 section 5): memory now ages in lived ticks,
+not calendar seconds, when MMI_CLOCK=ticks (default stays wall, so
+existing users see no behaviour change; E1 runs with ticks).
+
+Added
+- MMI_CLOCK=ticks|wall (default wall). Ticks mode weight:
+(1 + repeats) * e^(-Dn/tau_layer), Dn = n_now - record_tick.
+record_time/valid_time stay as audited stamps and do not affect decay.
+MMI_TAU_TICKS sets per-layer constants in ticks (default
+beat=10, episode=50, day=200, project=1000, life=5000); MMI_TAU_SCALE
+multiplies both clocks. Every record carries record_tick.
+- The stand counts ticks, not the model: +1 lived tick per executed
+WRITE / REPEAT / CONNECT / RECONCILE act; READ / STATUS never advance it.
+A manual matryoshka_tick in ticks mode is a deprecated no-op.
+- matryoshka_connect (CONNECT act): link existing records with a summary;
+NEW record with refs, sources never modified.
+- matryoshka_reconcile (RECONCILE act): clock-biography events in a slow
+layer (default project), refs to affected records; past never rewritten.
+- MMI_INJECT_TOP=N: matryoshka_read results carry a <<PMI>> block with the
+N loudest WRITE traces by weight - amplitude only, no relevance,
+no content search (Arm C physics injection).
+- matryoshka_status now reports clock, ticks, per-type acts counts,
+tau_ticks and inject_top.
+
+Invariants kept: append-only, no record ever modified or deleted, no
+semantic index, no weight filtering, tool names unchanged,
+~/.matryoshka/ paths unchanged.
+
 ## 0.5.1 — 2026-08-30 — Honest edges (audit fixes)
 
 Fixed

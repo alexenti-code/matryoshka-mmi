@@ -53,11 +53,13 @@ Architecture roles (per Matryoshka MANIFEST):
 
 | Tool | Act | Semantics |
 |---|---|---|
-| `matryoshka_tick` | TICK | accept the working beat; record priorities. Written to the time log `TICKS.log`, **not** to Φ; READ does not return ticks (write-only beat log in this version) |
-| `matryoshka_write` | WRITE | conscious remembering; fields: content (required), layer, valid_time, source |
+| `matryoshka_tick` | TICK | wall-clock mode: accept the working beat; record priorities. Written to the time log `TICKS.log`, **not** to Φ; READ does not return ticks (write-only beat log in this version). Tick-clock mode (`MMI_CLOCK=ticks`): deprecated no-op — the stand counts ticks itself, this call appends nothing |
+| `matryoshka_write` | WRITE (name) | conscious remembering; fields: content (required), layer, valid_time, source. Every record also carries `record_tick` (lived ticks so far) |
 | `matryoshka_repeat` | REPEAT | conscious re-learning of an existing WRITE record (error on a missing/non-WRITE id); appends a NEW record with `refs: [id]`; each repeat doubles the original trace's signal |
-| `matryoshka_read` | READ | explicit lookup only: `ids`, or `from/to` time range, or `last N`; every returned record carries a computed `weight` |
-| `matryoshka_status` | STATUS | self-report: version, record counts per layer (WRITE records), storage path, dials, friction model, repeat count |
+| `matryoshka_connect` | CONNECT | conscious linking of existing records (error on missing ids or empty refs); appends a NEW record with `act: CONNECT`, `refs: [ids]`, content = summary; linked records are never modified |
+| `matryoshka_reconcile` | RECONCILE | clock-biography event (e.g. a lived-ticks vs wall-stamps divergence); appends a NEW record with `act: RECONCILE` in a slow layer (default `project`), `refs` to affected records (may be empty); the past is never rewritten |
+| `matryoshka_read` | READ | explicit lookup only: `ids`, or `from/to` time range, or `last N`; every returned record carries a computed `weight`. With `MMI_INJECT_TOP=N` the result is wrapped as `{"records": [...], "_pmi": "<<PMI>> block"}` |
+| `matryoshka_status` | STATUS | self-report: version, record counts per layer (WRITE records), act counts per type (`acts`), clock mode (`clock`), lived ticks (`ticks`), storage path, dials, friction model (wall τ and tick τ), repeat count, inject setting |
 
 
 ## 3.1. Memory dials (v0.4.0)
@@ -113,6 +115,34 @@ rate, not a place") defines the target physics of forgetting:
   by content. Capacity pressure stays in the dials (volume/tempo), which
   move records to the archive by record-time/size physics only.
 
+### Tick clock (v0.6.0, PlastFormer ADR-001 §5)
+
+`MMI_CLOCK=ticks|wall` (env, default `wall` for backward compatibility;
+E1 runs with `ticks`).
+
+- `wall`: weight decays in wall-clock seconds —
+  `weight = (1 + repeats) · e^(−dt/τ)`, τ per layer in seconds, `dt` from
+  `record_time`. `record_tick` is recorded but ignored.
+- `ticks`: weight decays in lived ticks —
+  `weight = (1 + repeats) · e^(−Δn/τ_layer)`, `Δn = n_now − record_tick`,
+  where `n_now` is the lived-tick counter (records in `TICKS.log`) and τ
+  per layer is in ticks (`MMI_TAU_TICKS`, default
+  `beat=10, episode=50, day=200, project=1000, life=5000`; `MMI_TAU_SCALE`
+  multiplies both clocks). `record_time`/`valid_time` stay as audited
+  stamps and do not affect the weight. Records without `record_tick`
+  (written before v0.6.0) count as tick 0.
+- The stand advances the counter: +1 per executed WRITE / REPEAT /
+  CONNECT / RECONCILE act. READ / STATUS never advance it. A manual
+  `matryoshka_tick` call in ticks mode is a deprecated no-op (returns
+  `{"deprecated": true, ...}`, appends nothing).
+
+### Loudest-N injection (v0.6.0, Arm C)
+
+`MMI_INJECT_TOP=N` (env, default 0 = off): `matryoshka_read` results carry
+an extra `_pmi` field — a `<<PMI>>` block with the N loudest WRITE traces
+by current weight. Ranking is by amplitude only: no relevance, no content
+matching, no semantic index, no weight filtering of the journal itself.
+
 Consequences for this implementation: decay is applied as physics by the
 executor; nothing is ever selected for deletion by content. Erasure happens
 by amplitude decay and capacity pressure, not by a censorship rule. The
@@ -127,6 +157,7 @@ is specified in the research repository (stand SPEC v0.2–v0.5, THEORY.md).
   "id": 1,
   "record_time": "2026-08-29T21:00:00+03:00",
   "valid_time": "2026-08-29T21:00:00+03:00",
+  "record_tick": 7,
   "layer": "episode",
   "act": "WRITE",
   "content": "the fact to remember",
@@ -134,8 +165,17 @@ is specified in the research repository (stand SPEC v0.2–v0.5, THEORY.md).
 }
 ```
 
-REPEAT records carry `act: "REPEAT"` and `refs: [id]` instead of a layer of
-their own; `source: "repeat"`.
+- `record_tick` (v0.6.0): lived ticks so far when the record was stored.
+  In tick-clock mode it is the decay baseline; in wall mode it is audit
+  only. Pre-0.6.0 records have no `record_tick` and count as tick 0.
+- REPEAT records carry `act: "REPEAT"` and `refs: [id]` instead of a layer of
+  their own; `source: "repeat"`.
+- CONNECT records carry `act: "CONNECT"`, `refs: [ids]`, content = the
+  model's summary of what the linked traces mean together
+  (`source: "connect"`); the linked records keep all fields intact.
+- RECONCILE records carry `act: "RECONCILE"`, `refs: [ids]` (may be empty),
+  content = the clock-biography note, in a slow layer (default `project`,
+  `source: "reconcile"`).
 
 Invariants:
 
